@@ -55,6 +55,9 @@ function Instrum:enter(params)
     self.rejectSfxSource = nil
 
     self:buildHotzones()
+
+    local rndIdx = love.math.random(1, 7)
+    AudioQueue.clearAndPlay({ group = "endsound", key = "random" .. tostring(rndIdx) })
 end
 
 function Instrum:stopRejectSfx()
@@ -145,6 +148,8 @@ end
 
 function Instrum:chooseFamily(fam)
     self.idleTimer = 0
+    AudioQueue.stopVo()
+    self:stopRejectSfx()
     self:stopRejectSfx()
     if fam.family == self.target.family then
         self.rejectCooldown = 0
