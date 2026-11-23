@@ -9,6 +9,8 @@ local Rooms = require("src.data.rooms")
 
 local Orch = {}
 
+local SKIP_LOCK_SECONDS = 3.0
+
 local function pickBuildTrack(foundCount)
     local buildKey = "build" .. tostring(App.session.buildIndex or 1)
     local order = Assets.getMusicBuild(buildKey)
@@ -49,6 +51,8 @@ function Orch:enter(params)
     local buildKey, trackKey = pickBuildTrack(self.foundCount)
     local groupName = "music_" .. buildKey
     self.elapsed = 0
+    self.skipUnlocked = self:canSkip()
+    Cursor.setSystem(self.skipUnlocked and "hand" or "arrow")
     self.musicStarted = false
     if App.session.musicEnabled ~= false and Assets.getAudioPath(groupName, trackKey) then
         AudioQueue.playMusic({ group = groupName, key = trackKey }, { loop = false, volume = 0.85 })
@@ -61,6 +65,10 @@ function Orch:exit()
     Cursor.reset()
 end
 
+function Orch:canSkip()
+    return self.previewOnly or self.elapsed >= SKIP_LOCK_SECONDS
+end
+
 function Orch:proceed()
     if not self.previewOnly and (App.session.caughtCount or 0) >= 19 then
         SceneManager.switch(App.states.finale)
@@ -71,6 +79,10 @@ end
 
 function Orch:update(dt)
     self.elapsed = self.elapsed + dt
+    if not self.skipUnlocked and self:canSkip() then
+        self.skipUnlocked = true
+        Cursor.setSystem("hand")
+    end
     self.frameFloat = self.frameFloat + dt * self.fps
     if self.frameFloat > self.endFrame + 0.99 then
         self.frameFloat = self.startFrame
@@ -82,13 +94,21 @@ function Orch:update(dt)
     end
 end
 
+function Orch:mousemoved()
+    Cursor.setSystem(self:canSkip() and "hand" or "arrow")
+end
+
 function Orch:mousepressed()
-    self:proceed()
+    if self:canSkip() then
+        self:proceed()
+    end
 end
 
 function Orch:keypressed(key)
     if key == "escape" or key == "space" or key == "return" then
-        self:proceed()
+        if self:canSkip() then
+            self:proceed()
+        end
         return true
     end
     return false
@@ -108,8 +128,11 @@ function Orch:draw()
     love.graphics.setColor(0.08, 0.10, 0.14, 0.88)
     love.graphics.rectangle("fill", 40, 446, 560, 26, 6, 6)
     love.graphics.setColor(0.95, 0.92, 0.65, 1)
+    local msg = self:canSkip()
+        and string.format("Het Grote Groene Muizenorkest (%d/19)  •  Klik / Esc = Verder", self.foundCount)
+        or string.format("Het Grote Groene Muizenorkest (%d/19)", self.foundCount)
     love.graphics.printf(
-        string.format("Het Grote Groene Muizenorkest (%d/19)  •  Klik / Esc = Verder", self.foundCount),
+        msg,
         48,
         452,
         544,
