@@ -1,0 +1,48 @@
+# Original game dumps & extracted assets (never commit copyrighted content)
+backup/
+original/
+assets/
+build/
+dist/
+love-android/
+
+# Local developer config & Python/OS artifacts
+local_config.lua
+.DS_Store
+__pycache__/
+*.pyc
+
+# Packages, disk images, and executables
+*.love
+*.apk
+*.aab
+*.iso
+*.bin
+*.cue
+*.img
+*.dmg
+*.exe
+*.dll
+*.ex_
+*.lib
+*.ins
+*.ico
+*.wri
+
+# Raw & converted media formats
+*.bmp
+*.png
+*.jpg
+*.jpeg
+*.wav
+*.aif
+*.aiff
+*.ogg
+*.ogv
+*.avi
+*.mov
+*.mp4
+*.dxr
+*.dir
+*.cxt
+*.cst
