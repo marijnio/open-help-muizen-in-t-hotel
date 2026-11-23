@@ -11,13 +11,14 @@ function Intro:enter(params)
     Cursor.reset()
     AudioQueue.stopAll()
     self.returnState = (params and params.returnState) or App.states.start_menu
+    self.returnParams = params and params.returnParams
     self.player = VideoPlayer.new("engintro", {
         onFinish = function()
-            SceneManager.switch(self.returnState)
+            SceneManager.switch(self.returnState, self.returnParams)
         end,
     })
     if not self.player then
-        SceneManager.switch(self.returnState)
+        SceneManager.switch(self.returnState, self.returnParams)
     end
 end
 
@@ -44,12 +45,12 @@ function Intro:update(dt)
 end
 
 function Intro:mousepressed()
-    SceneManager.switch(self.returnState)
+    SceneManager.switch(self.returnState, self.returnParams)
 end
 
 function Intro:keypressed(key)
     if key == "escape" or key == "space" or key == "return" then
-        SceneManager.switch(self.returnState)
+        SceneManager.switch(self.returnState, self.returnParams)
         return true
     end
     return false

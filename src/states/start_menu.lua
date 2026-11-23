@@ -13,20 +13,43 @@ local StartMenu = {}
 local DIFFICULTY_CASTS = { [1] = 11, [2] = 12, [3] = 13 }
 local MUSIC_CASTS = { [true] = 15, [false] = 14 }
 
-function StartMenu:enter()
+function StartMenu:enter(params)
     Cursor.reset()
     AudioQueue.stopAll()
     self.frameNum = DirectorStage.getLabelFrame("ggmdmenu", "start") or 7
+    self.resumeFrameNum = 6
     self.difficulty = App.session.difficulty or 1
     self.musicEnabled = (App.session.musicEnabled ~= false)
     self.notice = nil
     self.noticeTimer = 0
+    self.hasSave = Save.exists()
 
     AudioQueue.setMusicEnabled(self.musicEnabled)
     if self.musicEnabled then
         AudioQueue.playMusic({ group = "root", key = "start" }, { loop = true, volume = 0.55 })
     end
 
+    if self.hasSave and not (params and params.skipResumePrompt) then
+        self:showResumePrompt()
+    else
+        self:showOptions()
+    end
+end
+
+function StartMenu:showResumePrompt()
+    self.mode = "resume_prompt"
+    self.hotzones = Hotzone.new()
+    -- GGMDMENU Frame 6 exact hotzones ("Wil je verder gaan met een bestaand spel?")
+    self.hotzones:add({ id = "resume_no",  x = 221, y = 264, w = 79, h = 47, onClick = function() self:showOptions() end })
+    self.hotzones:add({ id = "resume_yes", x = 313, y = 262, w = 88, h = 45, onClick = function() self:loadSavedGame() end })
+    self.hotzones:add({ id = "back_launcher", x = 18, y = 440, w = 54, h = 39, onClick = function()
+        SceneManager.switch(App.states.launcher)
+    end })
+    Cursor.reset()
+end
+
+function StartMenu:showOptions()
+    self.mode = "options"
     self.hotzones = Hotzone.new()
     -- GGMDMENU Frame 7 exact hotzones
     self.hotzones:add({ id = "level_1", x = 240, y = 58,  w = 177, h = 41, onClick = function() self:setDifficulty(1) end })
@@ -36,15 +59,24 @@ function StartMenu:enter()
     self.hotzones:add({ id = "music_on",  x = 245, y = 240, w = 162, h = 40, onClick = function() self:setMusic(true) end })
     self.hotzones:add({ id = "music_off", x = 242, y = 282, w = 168, h = 39, onClick = function() self:setMusic(false) end })
 
-    self.hotzones:add({ id = "start_new", x = 193, y = 359, w = 138, h = 52, onClick = function() self:startNewGame() end })
-    self.hotzones:add({ id = "load_game", x = 338, y = 359, w = 138, h = 52, onClick = function() self:loadSavedGame() end })
+    self.hotzones:add({ id = "quit_menu", x = 193, y = 359, w = 138, h = 52, onClick = function()
+        SceneManager.switch(App.states.launcher)
+    end })
+    self.hotzones:add({ id = "start_new", x = 338, y = 359, w = 138, h = 52, onClick = function() self:startNewGame() end })
 
     self.hotzones:add({ id = "back_launcher", x = 18, y = 440, w = 54, h = 39, onClick = function()
         SceneManager.switch(App.states.launcher)
     end })
     self.hotzones:add({ id = "watch_intro", x = 510, y = 446, w = 120, h = 28, onClick = function()
-        SceneManager.switch(App.states.intro, { returnState = App.states.start_menu })
+        SceneManager.switch(App.states.intro, {
+            returnState = App.states.start_menu,
+            returnParams = { skipResumePrompt = true },
+        })
     end })
+    if self.hasSave then
+        self.hotzones:add({ id = "load_game", x = 80, y = 446, w = 124, h = 28, onClick = function() self:loadSavedGame() end })
+    end
+    Cursor.reset()
 end
 
 function StartMenu:exit()
@@ -101,6 +133,10 @@ end
 function StartMenu:loadSavedGame()
     local saved = Save.load()
     if not saved then
+        self.hasSave = Save.exists()
+        if self.mode ~= "options" then
+            self:showOptions()
+        end
         self.notice = "Geen opgeslagen spel gevonden!"
         self.noticeTimer = 2.5
         return
@@ -131,6 +167,20 @@ function StartMenu:mousepressed(vx, vy, button)
 end
 
 function StartMenu:keypressed(key)
+    if self.mode == "resume_prompt" then
+        if key == "escape" then
+            SceneManager.switch(App.states.launcher)
+            return true
+        elseif key == "return" or key == "j" or key == "y" then
+            self:loadSavedGame()
+            return true
+        elseif key == "n" then
+            self:showOptions()
+            return true
+        end
+        return false
+    end
+
     if key == "escape" then
         SceneManager.switch(App.states.launcher)
         return true
@@ -144,27 +194,38 @@ function StartMenu:keypressed(key)
     return false
 end
 
+local function drawPill(x, y, w, h, label, hovered)
+    love.graphics.setColor(hovered and 0.18 or 0.10, hovered and 0.24 or 0.12, hovered and 0.20 or 0.16, 0.90)
+    love.graphics.rectangle("fill", x, y, w, h, 6, 6)
+    love.graphics.setColor(0.85, 0.90, 0.72, 1)
+    love.graphics.rectangle("line", x, y, w, h, 6, 6)
+    love.graphics.printf(label, x, y + 7, w, "center")
+end
+
 function StartMenu:draw(vx, vy)
     love.graphics.push("all")
-    DirectorStage.drawFrame("ggmdmenu", self.frameNum, {
-        channelCasts = {
-            [4] = DIFFICULTY_CASTS[self.difficulty] or 11,
-            [5] = MUSIC_CASTS[self.musicEnabled],
-        },
-    })
+    if self.mode == "resume_prompt" then
+        DirectorStage.drawFrame("ggmdmenu", self.resumeFrameNum)
+    else
+        DirectorStage.drawFrame("ggmdmenu", self.frameNum, {
+            channelCasts = {
+                [4] = DIFFICULTY_CASTS[self.difficulty] or 11,
+                [5] = MUSIC_CASTS[self.musicEnabled],
+            },
+        })
 
-    -- Subtle modern helper pills at bottom corners
-    love.graphics.setColor(0.10, 0.12, 0.16, 0.85)
-    love.graphics.rectangle("fill", 510, 446, 120, 28, 6, 6)
-    love.graphics.setColor(0.85, 0.90, 0.72, 1)
-    love.graphics.rectangle("line", 510, 446, 120, 28, 6, 6)
-    love.graphics.printf("Intro bekijken", 510, 453, 120, "center")
+        -- Subtle modern helper pills at bottom corners
+        drawPill(510, 446, 120, 28, "Intro bekijken", self.hotzones.hoveredId == "watch_intro")
+        if self.hasSave then
+            drawPill(80, 446, 124, 28, "Verder spelen", self.hotzones.hoveredId == "load_game")
+        end
+    end
 
     if self.notice then
         love.graphics.setColor(0.1, 0.1, 0.14, 0.92)
-        love.graphics.rectangle("fill", 180, 422, 280, 30, 6, 6)
+        love.graphics.rectangle("fill", 180, 414, 280, 26, 6, 6)
         love.graphics.setColor(1, 0.85, 0.35, 1)
-        love.graphics.printf(self.notice, 180, 430, 280, "center")
+        love.graphics.printf(self.notice, 180, 420, 280, "center")
     end
 
     if App.debugMode then

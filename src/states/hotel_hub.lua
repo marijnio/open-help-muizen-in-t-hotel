@@ -259,14 +259,14 @@ function HotelHub:promptExit()
                 action = function()
                     Save.write(App.session)
                     SceneManager.clearOverlay()
-                    SceneManager.switch(App.states.start_menu)
+                    SceneManager.switch(App.states.start_menu, { skipResumePrompt = true })
                 end,
             },
             {
                 label = "Niet opslaan",
                 action = function()
                     SceneManager.clearOverlay()
-                    SceneManager.switch(App.states.start_menu)
+                    SceneManager.switch(App.states.start_menu, { skipResumePrompt = true })
                 end,
             },
             {
