@@ -38,10 +38,10 @@ function Orch:enter(params)
     self.score = Assets.getDxr("orch")
     self.fps = (self.score and self.score.fps) or 10
 
-    local ml = DirectorStage.getLabelFrame("orch", "ml") or 5
-    local ret = DirectorStage.getLabelFrame("orch", "return") or 32
-    self.startFrame = ml
-    self.endFrame = math.max(ml, ret - 1)
+    local _, spans = DirectorStage.getLabelSpans("orch")
+    local mlSpan = spans["ml"]
+    self.startFrame = (mlSpan and mlSpan.startFrame) or 5
+    self.endFrame = (mlSpan and mlSpan.endFrame) or 28
     self.frameFloat = self.startFrame
 
     self.hiddenChannels = {}
@@ -115,13 +115,13 @@ function Orch:draw()
     })
 
     love.graphics.setColor(0.08, 0.10, 0.14, 0.88)
-    love.graphics.rectangle("fill", 70, 444, 500, 28, 6, 6)
+    love.graphics.rectangle("fill", 40, 446, 560, 26, 6, 6)
     love.graphics.setColor(0.95, 0.92, 0.65, 1)
     love.graphics.printf(
-        string.format("Het Grote Groene Muizenorkest (%d/19)  •  Klik of Esc om door te gaan", self.foundCount),
-        76,
-        451,
-        488,
+        string.format("Het Grote Groene Muizenorkest (%d/19)  •  Klik / Esc = Verder", self.foundCount),
+        48,
+        452,
+        544,
         "center"
     )
     love.graphics.pop()

@@ -114,6 +114,16 @@ function DirectorStage.getLabelFrame(movieKey, labelName)
     return score.label_frames[string.lower(labelName)]
 end
 
+local function frameHasChannel(frame, ch)
+    if not frame then return false end
+    for _, sp in ipairs(frame) do
+        if sp.ch == ch then
+            return true
+        end
+    end
+    return false
+end
+
 function DirectorStage.getLabelSpans(movieKey)
     local score = Assets.getDxr(movieKey)
     if not score or not score.labels then
@@ -130,6 +140,16 @@ function DirectorStage.getLabelSpans(movieKey)
     for i, item in ipairs(ordered) do
         local nextFrame = ordered[i + 1] and ordered[i + 1].frame or (totalFrames + 1)
         local endFrame = math.max(item.frame, math.min(totalFrames, nextFrame - 1))
+        local startData = score.frames[item.frame]
+        local requireBg = startData and frameHasChannel(startData, 1)
+        while endFrame > item.frame do
+            local fd = score.frames[endFrame]
+            if not fd or #fd == 0 or (requireBg and not frameHasChannel(fd, 1)) then
+                endFrame = endFrame - 1
+            else
+                break
+            end
+        end
         item.startFrame = item.frame
         item.endFrame = endFrame
         if not spans[item.key] then

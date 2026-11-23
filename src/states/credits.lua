@@ -13,8 +13,21 @@ function Credits:enter()
     AudioQueue.stopAll()
     self.score = Assets.getDxr("credits")
     self.fps = (self.score and self.score.fps) or 11
-    self.totalFrames = (self.score and self.score.frames and #self.score.frames) or 355
-    self.frameFloat = 7
+    local totalFrames = (self.score and self.score.frames and #self.score.frames) or 355
+
+    self.validFrames = {}
+    if self.score and self.score.frames then
+        for i = 7, totalFrames do
+            local fr = self.score.frames[i]
+            if fr and #fr > 0 then
+                table.insert(self.validFrames, i)
+            end
+        end
+    end
+    if #self.validFrames == 0 then
+        table.insert(self.validFrames, 7)
+    end
+    self.frameIdxFloat = 1
 
     if App.session.musicEnabled ~= false then
         AudioQueue.playMusic({ group = "music_build1", key = "vibes" }, { loop = true, volume = 0.75 })
@@ -27,8 +40,8 @@ function Credits:exit()
 end
 
 function Credits:update(dt)
-    self.frameFloat = self.frameFloat + dt * self.fps
-    if self.frameFloat > self.totalFrames then
+    self.frameIdxFloat = self.frameIdxFloat + dt * self.fps
+    if self.frameIdxFloat > #self.validFrames + 0.99 then
         SceneManager.switch(App.states.launcher)
     end
 end
@@ -50,7 +63,8 @@ function Credits:draw()
     love.graphics.setColor(1, 1, 1, 1)
     love.graphics.rectangle("fill", 0, 0, 640, 480)
 
-    local frameNum = math.max(1, math.min(self.totalFrames, math.floor(self.frameFloat)))
+    local idx = math.max(1, math.min(#self.validFrames, math.floor(self.frameIdxFloat)))
+    local frameNum = self.validFrames[idx]
     DirectorStage.drawFrame("credits", frameNum, { sharedKey = nil })
 
     love.graphics.setColor(0.08, 0.10, 0.14, 0.85)
