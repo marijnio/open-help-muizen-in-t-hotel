@@ -44,6 +44,17 @@ function Launcher:enter()
             end,
         })
     end
+
+    self.hotzones:add({
+        id = "credits",
+        x = 532,
+        y = 442,
+        w = 94,
+        h = 28,
+        onClick = function()
+            SceneManager.switch(App.states.credits)
+        end,
+    })
 end
 
 function Launcher:exit()
@@ -157,6 +168,14 @@ function Launcher:draw(vx, vy)
         love.graphics.setColor(1, 0.85, 0.35, 1)
         love.graphics.printf(self.notice, 120, 443, 400, "center")
     end
+
+    local credHot = (self.hotzones.hoveredId == "credits")
+    love.graphics.setColor(credHot and 0.25 or 0.14, credHot and 0.45 or 0.18, credHot and 0.28 or 0.24, 0.92)
+    love.graphics.rectangle("fill", 532, 442, 94, 28, 6, 6)
+    love.graphics.setColor(0.65, 0.85, 0.68, 1)
+    love.graphics.rectangle("line", 532, 442, 94, 28, 6, 6)
+    love.graphics.setColor(1, 1, 1, 1)
+    love.graphics.printf("Credits", 532, 449, 94, "center")
 
     if App.debugMode then
         self.hotzones:drawDebug(vx, vy)

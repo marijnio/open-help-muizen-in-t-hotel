@@ -121,7 +121,7 @@ function HotelHub:enter(params)
     if params and params.justCaught then
         local caught = (App.session and App.session.caughtCount) or 0
         if caught >= 19 then
-            self.banner = "Alle 19 muizen gevangen! (Orkest & Finale in Milestone 3)"
+            self.banner = "Alle 19 muizen zijn herenigd in het orkest!"
         else
             self.banner = string.format("Muis gevangen in %s! (%d/19)", params.justCaught, caught)
         end
@@ -175,6 +175,19 @@ function HotelHub:enter(params)
             })
         end,
     })
+
+    if (App.session and App.session.caughtCount or 0) > 0 then
+        self.hotzones:add({
+            id = "open_orch",
+            x = 466,
+            y = 449,
+            w = 84,
+            h = 24,
+            onClick = function()
+                SceneManager.switch(App.states.orch, { previewOnly = true })
+            end,
+        })
+    end
 end
 
 function HotelHub:exit()
@@ -325,17 +338,28 @@ function HotelHub:draw(vx, vy)
     -- Highlight hovered/selected room subtly + draw bottom bar status
     local caught = (App.session and App.session.caughtCount) or 0
     local traps = (App.session and App.session.trapsLeft) or 0
+    local pillW = (caught > 0) and 362 or 448
     love.graphics.setColor(0.12, 0.14, 0.18, 0.9)
-    love.graphics.rectangle("fill", 96, 449, 448, 24, 5, 5)
+    love.graphics.rectangle("fill", 96, 449, pillW, 24, 5, 5)
     love.graphics.setColor(0.95, 0.92, 0.65, 1)
     local roomLabel = self.detectedRoom and ("  •  " .. self.detectedRoom.title) or ""
     love.graphics.printf(
         string.format("Gevangen: %d/19   •   Vallen: %d%s", caught, traps, roomLabel),
         100,
         454,
-        440,
+        pillW - 8,
         "center"
     )
+
+    if caught > 0 then
+        local hotOrch = (self.hotzones.hoveredId == "open_orch")
+        love.graphics.setColor(hotOrch and 0.25 or 0.16, hotOrch and 0.52 or 0.34, hotOrch and 0.28 or 0.20, 0.95)
+        love.graphics.rectangle("fill", 466, 449, 84, 24, 5, 5)
+        love.graphics.setColor(0.65, 0.95, 0.55, 1)
+        love.graphics.rectangle("line", 466, 449, 84, 24, 5, 5)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.printf("Orkest", 466, 454, 84, "center")
+    end
 
     -- Draw Mouse-Detector TV Scanner following cursor
     if (self.scannerVisible or self.touchSelectedRoomId) and vx and vy then

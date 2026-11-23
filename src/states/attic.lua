@@ -218,7 +218,7 @@ function Attic:catchMouse()
         self.animSpan = endSpan
         self.animFrameFloat = endSpan.startFrame
     else
-        SceneManager.switch(App.states.hotel_hub, { justCaught = "Zolder" })
+        SceneManager.switch(App.states.instrum, { roomTitle = "Zolder" })
     end
 end
 
@@ -264,7 +264,7 @@ function Attic:update(dt)
     self.animFrameFloat = self.animFrameFloat + dt * playFps
     if self.animFrameFloat > self.animSpan.endFrame + 0.99 then
         if self.mode == "caught" then
-            SceneManager.switch(App.states.hotel_hub, { justCaught = "Zolder" })
+            SceneManager.switch(App.states.instrum, { roomTitle = "Zolder" })
             return
         elseif self.mode == "mouse_run" then
             AudioQueue.playSfx("dxr/shared/sounds/s_822.wav", 0.65)

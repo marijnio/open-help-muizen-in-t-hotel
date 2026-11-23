@@ -91,6 +91,8 @@ function StartMenu:startNewGame()
         caughtCount = 0,
         mouseRooms = mouseRooms,
         seenIntros = {},
+        foundInstruments = {},
+        lastInstrument = nil,
         buildIndex = love.math.random(1, 3),
     }
     SceneManager.switch(App.states.hotel_hub)

@@ -260,7 +260,7 @@ function Room:finishRoomCapture()
         self.caughtPlayer:stop()
         self.caughtPlayer = nil
     end
-    SceneManager.switch(App.states.hotel_hub, { justCaught = self.room.title })
+    SceneManager.switch(App.states.instrum, { roomTitle = self.room.title })
 end
 
 function Room:catchMouse()

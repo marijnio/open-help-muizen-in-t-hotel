@@ -19,6 +19,8 @@ App = {
         caughtCount = 0,
         mouseRooms = {},
         seenIntros = {},
+        foundInstruments = {},
+        lastInstrument = nil,
         buildIndex = 1,
     },
     states = {},
@@ -47,6 +49,10 @@ function love.load()
         hotel_hub = require("src.states.hotel_hub"),
         room = require("src.states.room"),
         attic = require("src.states.attic"),
+        instrum = require("src.states.instrum"),
+        orch = require("src.states.orch"),
+        finale = require("src.states.finale"),
+        credits = require("src.states.credits"),
         gallery = require("src.states.gallery"),
     }
 
