@@ -4,30 +4,30 @@ local Rooms = {}
 
 -- Ordered in GGMDMENU STXT#42 roomlist order (channels 5..24 in Frame 14)
 Rooms.LIST = {
-    { id = "artist",   title = "Atelier",                   x = 53,  y = 107, w = 91,  h = 67, mov = "artist",   dxr = "artist",   startsnd = "artist" },
-    { id = "farmer",   title = "Boerenkamer",               x = 166, y = 104, w = 91,  h = 68, mov = "farmer",   dxr = "farmer",   startsnd = "farmer" },
-    { id = "witches",  title = "Heksenkamer",               x = 278, y = 104, w = 93,  h = 68, mov = "witch",    dxr = "witches",  startsnd = "witches" },
-    { id = "plumber",  title = "Loodgieterskamer",          x = 391, y = 105, w = 91,  h = 67, mov = "plumber",  dxr = "plumber",  startsnd = "plumber" },
-    { id = "madsci",   title = "Laboratorium",              x = 506, y = 105, w = 91,  h = 67, mov = "madsci",   dxr = "madsci",   startsnd = "madsci" },
+    { id = "artist",   title = "Atelier",                   x = 43,  y = 83,  w = 110, h = 78, mov = "artist",   dxr = "artist",   startsnd = "artist" },
+    { id = "farmer",   title = "Boerenkamer",               x = 161, y = 84,  w = 104, h = 77, mov = "farmer",   dxr = "farmer",   startsnd = "farmer" },
+    { id = "witches",  title = "Heksenkamer",               x = 274, y = 83,  w = 100, h = 78, mov = "witch",    dxr = "witches",  startsnd = "witches" },
+    { id = "plumber",  title = "Loodgieterskamer",          x = 383, y = 81,  w = 105, h = 80, mov = "plumber",  dxr = "plumber",  startsnd = "plumber" },
+    { id = "madsci",   title = "Laboratorium",              x = 497, y = 81,  w = 105, h = 80, mov = "madsci",   dxr = "madsci",   startsnd = "madsci" },
 
-    { id = "newlywed", title = "Bruidssuite",               x = 50,  y = 188, w = 117, h = 67, mov = "newlywed", dxr = "newlywed", startsnd = "newlywed" },
-    { id = "presbed",  title = "Presidentiële Slaapkamer",  x = 188, y = 190, w = 122, h = 67, mov = "presbed",  dxr = "presbed",  startsnd = "presbed" },
-    { id = "presliv",  title = "Presidentiële Salon",       x = 329, y = 191, w = 122, h = 67, mov = "presliv",  dxr = "presliv",  startsnd = "presliv" },
-    { id = "ballroom", title = "Balzaal",                   x = 471, y = 190, w = 121, h = 67, mov = "dance",    dxr = "ballroom", startsnd = "ballroom" },
+    { id = "newlywed", title = "Bruidssuite",               x = 42,  y = 168, w = 131, h = 78, mov = "newlywed", dxr = "newlywed", startsnd = "newlywed" },
+    { id = "presbed",  title = "Presidentiële Slaapkamer",  x = 183, y = 168, w = 132, h = 78, mov = "presbed",  dxr = "presbed",  startsnd = "presbed" },
+    { id = "presliv",  title = "Presidentiële Salon",       x = 325, y = 169, w = 131, h = 79, mov = "presliv",  dxr = "presliv",  startsnd = "presliv" },
+    { id = "ballroom", title = "Balzaal",                   x = 465, y = 169, w = 134, h = 80, mov = "dance",    dxr = "ballroom", startsnd = "ballroom" },
 
-    { id = "business", title = "Zakenkamer",                x = 47,  y = 277, w = 86,  h = 67, mov = "business", dxr = "business", startsnd = "business" },
-    { id = "playroom", title = "Speelkamer",                x = 151, y = 279, w = 91,  h = 67, mov = "playroom", dxr = "playroom", startsnd = "playroom" },
-    { id = "slobs",    title = "Rommelkamer",               x = 264, y = 278, w = 104, h = 67, mov = "slob",     dxr = "slobs",    startsnd = "slobs" },
-    { id = "bathroom", title = "Badkamer",                  x = 393, y = 277, w = 91,  h = 67, mov = "bathroom", dxr = "bathroom", startsnd = "bathroom" },
-    { id = "exercise", title = "Fitnessruimte",             x = 505, y = 277, w = 91,  h = 67, mov = "exercise", dxr = "exercise", startsnd = "exercise" },
+    { id = "business", title = "Zakenkamer",                x = 42,  y = 254, w = 96,  h = 78, mov = "business", dxr = "business", startsnd = "business" },
+    { id = "playroom", title = "Speelkamer",                x = 145, y = 254, w = 102, h = 80, mov = "playroom", dxr = "playroom", startsnd = "playroom" },
+    { id = "slobs",    title = "Rommelkamer",               x = 257, y = 254, w = 117, h = 79, mov = "slob",     dxr = "slobs",    startsnd = "slobs" },
+    { id = "bathroom", title = "Badkamer",                  x = 383, y = 253, w = 106, h = 80, mov = "bathroom", dxr = "bathroom", startsnd = "bathroom" },
+    { id = "exercise", title = "Fitnessruimte",             x = 498, y = 254, w = 103, h = 79, mov = "exercise", dxr = "exercise", startsnd = "exercise" },
 
-    { id = "library",  title = "Leeszaal",                  x = 49,  y = 364, w = 91,  h = 67, mov = "library",  dxr = "library",  startsnd = "library" },
-    { id = "dining",   title = "Eetkamer",                  x = 159, y = 363, w = 91,  h = 67, mov = "dining",   dxr = "dining",   startsnd = "dining" },
-    { id = "kitchen",  title = "Keuken",                    x = 277, y = 364, w = 91,  h = 67, mov = "kitchen",  dxr = "kitchen",  startsnd = "kitchen" },
-    { id = "bar",      title = "Bar",                       x = 391, y = 365, w = 91,  h = 67, mov = "bar",      dxr = "bar",      startsnd = "bar" },
-    { id = "snooker",  title = "Biljartzaal",               x = 505, y = 364, w = 91,  h = 67, mov = "snooker",  dxr = "snooker",  startsnd = "snooker" },
+    { id = "library",  title = "Leeszaal",                  x = 41,  y = 341, w = 105, h = 79, mov = "library",  dxr = "library",  startsnd = "library" },
+    { id = "dining",   title = "Eetkamer",                  x = 154, y = 343, w = 101, h = 77, mov = "dining",   dxr = "dining",   startsnd = "dining" },
+    { id = "kitchen",  title = "Keuken",                    x = 267, y = 341, w = 108, h = 79, mov = "kitchen",  dxr = "kitchen",  startsnd = "kitchen" },
+    { id = "bar",      title = "Bar",                       x = 383, y = 342, w = 106, h = 77, mov = "bar",      dxr = "bar",      startsnd = "bar" },
+    { id = "snooker",  title = "Biljartzaal",               x = 498, y = 340, w = 102, h = 80, mov = "snooker",  dxr = "snooker",  startsnd = "snooker" },
 
-    { id = "attic",    title = "Zolder",                    x = 40,  y = 18,  w = 562, h = 67, mov = nil,        dxr = "attic",    startsnd = nil },
+    { id = "attic",    title = "Zolder",                    x = 43,  y = 12,  w = 557, h = 64, mov = nil,        dxr = "attic",    startsnd = nil },
 }
 
 Rooms.BY_ID = {}
