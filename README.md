@@ -4,6 +4,14 @@ An independent, clean-room, open-source reimplementation of the classic 1996 Dut
 
 ---
 
+## Screenshots
+
+| Hotel Hub & Mouse-Detector TV | Backstage Instrument Matching |
+| :---: | :---: |
+| ![Hotel Hub cross-section with Mouse-Detector TV scanner](docs/screenshots/1.png) | ![Backstage instrument matching room](docs/screenshots/2.png) |
+
+---
+
 ## Legal & Copyright Disclaimer
 
 * **No copyrighted assets are included in this repository.** Original `.DXR`, `.EXE`, `.MOV`, `.AIF`, `.WAV`, and `.BMP` files, as well as converted images, audio, video frames, `.love` archives, and `.apk` builds, are excluded via [.gitignore](.gitignore).

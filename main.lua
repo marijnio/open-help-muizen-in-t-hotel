@@ -54,7 +54,7 @@ function App.reloadAssets()
 end
 
 function App.enterInitialScene()
-    SceneManager.switch(App.states.launcher)
+    SceneManager.switch(App.states.splash)
 end
 
 function love.load()
@@ -66,6 +66,7 @@ function love.load()
 
     App.states = {
         missing_assets = require("src.states.missing_assets"),
+        splash = require("src.states.splash"),
         launcher = require("src.states.launcher"),
         intro = require("src.states.intro"),
         start_menu = require("src.states.start_menu"),

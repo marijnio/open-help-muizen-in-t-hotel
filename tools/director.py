@@ -340,9 +340,11 @@ class DirectorMovie:
         return self.parse_score_bytes(self.chunk(self.by_tag[b"VWSC"][0].idx))
 
     def resolve_palette(
-        self, clut_id: int, shared: Optional["DirectorMovie"] = None
+        self, clut_id: Optional[int], shared: Optional["DirectorMovie"] = None
     ) -> List[Tuple[int, int, int]]:
-        if clut_id > 0:
+        if clut_id == 0:
+            return MAC_SYSTEM_PALETTE
+        if clut_id is not None and clut_id > 0:
             if clut_id in self.palettes:
                 return self.palettes[clut_id]
             if shared is not None and clut_id in shared.palettes:
@@ -376,7 +378,7 @@ class DirectorMovie:
         else:
             reg_x, reg_y = 0, 0
         depth = struct.unpack(">H", cd[30:32])[0] if spec_len >= 26 and len(cd) >= 32 else 1
-        clut_id = struct.unpack(">h", cd[32:34])[0] if spec_len >= 28 and len(cd) >= 34 else 0
+        clut_id = struct.unpack(">h", cd[32:34])[0] if spec_len >= 28 and len(cd) >= 34 else None
 
         bitd_idx = self.keymap.get((cidx, b"BITD"))
         if bitd_idx is None:

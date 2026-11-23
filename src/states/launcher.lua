@@ -17,9 +17,13 @@ local MENU_ITEMS = {
     { id = "quit",      label = "Afsluiten",                 sub = "Esc" },
 }
 
-function Launcher:enter()
+function Launcher:enter(params)
     Cursor.reset()
-    AudioQueue.stopAll()
+    if params and params.keepMusic then
+        AudioQueue.stopVo()
+    else
+        AudioQueue.stopAll()
+    end
     self.notice = nil
     self.noticeTimer = 0
     self.hotzones = Hotzone.new()

@@ -46,3 +46,6 @@ __pycache__/
 *.dir
 *.cxt
 *.cst
+
+# Allow README documentation screenshots
+!docs/screenshots/*.png
