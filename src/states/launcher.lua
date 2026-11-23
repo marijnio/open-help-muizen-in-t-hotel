@@ -1,4 +1,4 @@
--- CD-ROM Launcher: Main Game + Intro + upcoming Bonus Games (Maze & Super Spel).
+-- CD-ROM Launcher: Main Game + Bonus Games (Maze & Super Spel).
 
 local Assets = require("src.core.assets")
 local AudioQueue = require("src.core.audio_queue")
@@ -11,7 +11,6 @@ local Launcher = {}
 
 local MENU_ITEMS = {
     { id = "main_game", label = "Help! Muizen in 't Hotel!", sub = "Hoofdspel" },
-    { id = "intro",     label = "Introductiefilm bekijken",  sub = "Verhaal (QuickTime)" },
     { id = "doolhof",   label = "Het Muizendoolhof",         sub = "Bonusspel • Doolhof" },
     { id = "superspel", label = "Super Spel",                sub = "Bonusspel • Arcade" },
     { id = "quit",      label = "Afsluiten",                 sub = "Esc" },
@@ -28,7 +27,7 @@ function Launcher:enter(params)
     self.noticeTimer = 0
     self.hotzones = Hotzone.new()
 
-    local startY = 140
+    local startY = 160
     local btnW, btnH = 340, 46
     local btnX = math.floor((640 - btnW) * 0.5)
     local gap = 10
@@ -67,8 +66,6 @@ end
 function Launcher:activate(id)
     if id == "main_game" then
         SceneManager.switch(App.states.start_menu)
-    elseif id == "intro" then
-        SceneManager.switch(App.states.intro)
     elseif id == "doolhof" then
         SceneManager.switch(App.states.doolhof)
     elseif id == "superspel" then

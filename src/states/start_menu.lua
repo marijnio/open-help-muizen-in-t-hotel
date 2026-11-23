@@ -120,7 +120,9 @@ function StartMenu:startNewGame()
     }
     Rooms.initSessionRooms(App.session)
     App.inActiveSession = true
-    SceneManager.switch(App.states.hotel_hub)
+    SceneManager.switch(App.states.intro, {
+        returnState = App.states.hotel_hub,
+    })
 end
 
 function StartMenu:loadSavedGame()
