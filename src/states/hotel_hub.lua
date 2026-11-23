@@ -14,6 +14,8 @@ local Rooms = require("src.data.rooms")
 
 local HotelHub = {}
 
+local DETECTOR_BLINK_INTERVAL = 0.25
+
 -- Modal overlay for Fat Lazy Cat hint video (320x200) or Room intro preview (640x480)
 local MediaPreviewOverlay = {}
 
@@ -110,12 +112,15 @@ function MediaPreviewOverlay:draw()
 end
 
 function HotelHub:enter(params)
+    Rooms.normalizeSession(App.session)
     self.frameNum = DirectorStage.getLabelFrame("ggmdmenu", "select") or 14
     self.hotzones = Hotzone.new()
     self.detectedRoom = nil
+    self.blinkTimer = 0
+    self.blinkOn = true
     self.touchSelectedRoomId = nil
     self.scannerVisible = false
-    self.lastScanSfxAt = -10
+    self.scanSfxSource = nil
     self.banner = nil
     self.bannerTimer = 0
     if params and params.justCaught then
@@ -142,6 +147,7 @@ function HotelHub:enter(params)
             onLeave = function()
                 if self.detectedRoom and self.detectedRoom.id == room.id then
                     self.detectedRoom = nil
+                    self:stopHoverAudio()
                 end
             end,
             onClick = function()
@@ -188,31 +194,46 @@ function HotelHub:enter(params)
             end,
         })
     end
+
+    if not App.isTouchMode and App.lastVx and App.lastVy then
+        self:mousemoved(App.lastVx, App.lastVy)
+    end
+end
+
+function HotelHub:stopHoverAudio()
+    AudioQueue.stopVo()
+    if self.scanSfxSource then
+        self.scanSfxSource:stop()
+        self.scanSfxSource = nil
+    end
 end
 
 function HotelHub:exit()
-    AudioQueue.stopVo()
+    self:stopHoverAudio()
     Cursor.reset()
 end
 
 function HotelHub:roomHasMouse(roomId)
-    local mr = App.session and App.session.mouseRooms
-    return mr and mr[roomId] == true
+    return Rooms.isActiveMouseRoom(App.session, roomId)
 end
 
 function HotelHub:onRoomHover(room)
     if self:roomHasMouse(room.id) then
+        if self.detectedRoom ~= room then
+            self.blinkTimer = 0
+            self.blinkOn = true
+        end
         self.detectedRoom = room
-        local now = love.timer.getTime()
-        if not App.isTouchMode and (now - self.lastScanSfxAt) > 0.65 then
-            self.lastScanSfxAt = now
-            AudioQueue.playSfx("dxr/ggmdmenu/sounds/s_27.wav", 0.55)
+        if not App.isTouchMode then
+            self:stopHoverAudio()
+            self.scanSfxSource = AudioQueue.playSfx("dxr/ggmdmenu/sounds/s_27.wav", 0.55)
             if room.startsnd and (App.session.musicEnabled ~= false) then
                 AudioQueue.clearAndPlay({ group = "startsnd", key = room.startsnd })
             end
         end
     else
         self.detectedRoom = nil
+        self:stopHoverAudio()
     end
 end
 
@@ -220,14 +241,22 @@ function HotelHub:onRoomClick(room)
     if App.isTouchMode and self.touchSelectedRoomId ~= room.id then
         self.touchSelectedRoomId = room.id
         if self:roomHasMouse(room.id) then
+            self.blinkTimer = 0
+            self.blinkOn = true
             self.detectedRoom = room
-            AudioQueue.playSfx("dxr/ggmdmenu/sounds/s_27.wav", 0.55)
+            self:stopHoverAudio()
+            self.scanSfxSource = AudioQueue.playSfx("dxr/ggmdmenu/sounds/s_27.wav", 0.55)
             if room.startsnd and (App.session.musicEnabled ~= false) then
                 AudioQueue.clearAndPlay({ group = "startsnd", key = room.startsnd })
             end
         else
             self.detectedRoom = nil
+            self:stopHoverAudio()
         end
+        return
+    end
+
+    if not self:roomHasMouse(room.id) then
         return
     end
 
@@ -245,9 +274,21 @@ function HotelHub:update(dt)
             self.banner = nil
         end
     end
+
+    if self.detectedRoom then
+        self.blinkTimer = self.blinkTimer + dt
+        while self.blinkTimer >= DETECTOR_BLINK_INTERVAL do
+            self.blinkTimer = self.blinkTimer - DETECTOR_BLINK_INTERVAL
+            self.blinkOn = not self.blinkOn
+        end
+    else
+        self.blinkTimer = 0
+        self.blinkOn = true
+    end
 end
 
 function HotelHub:promptExit()
+    self:stopHoverAudio()
     Cursor.reset()
     SceneManager.setOverlay(ConfirmDialog, {
         title = "Terug naar hoofdmenu",
@@ -308,7 +349,7 @@ end
 
 function HotelHub:draw(vx, vy)
     love.graphics.push("all")
-    love.graphics.setColor(0.95, 0.93, 0.88, 1)
+    love.graphics.setColor(0, 0, 0, 1)
     love.graphics.rectangle("fill", 0, 0, 640, 480)
 
     DirectorStage.drawFrame("ggmdmenu", self.frameNum, {
@@ -364,7 +405,7 @@ function HotelHub:draw(vx, vy)
     -- Draw Mouse-Detector TV Scanner following cursor
     if (self.scannerVisible or self.touchSelectedRoomId) and vx and vy then
         local gg = Assets.getDxr("ggmdmenu")
-        local castId = self.detectedRoom and 2 or 1
+        local castId = (self.detectedRoom and self.blinkOn) and 2 or 1
         local cast = gg and gg.casts[castId]
         if cast and cast.image then
             local img = Assets.getImage(cast.image, "nearest")
@@ -377,6 +418,8 @@ function HotelHub:draw(vx, vy)
 
     if App.debugMode then
         self.hotzones:drawDebug(vx, vy)
+        love.graphics.setColor(0.2, 1, 0.4, 1)
+        love.graphics.print("activeRoom=" .. tostring(App.session and App.session.activeMouseRoom), 10, 24)
     end
     love.graphics.pop()
 end

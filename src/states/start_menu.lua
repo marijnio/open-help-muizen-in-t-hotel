@@ -101,19 +101,6 @@ end
 
 function StartMenu:startNewGame()
     local trapsByDiff = { [1] = 10, [2] = 5, [3] = 0 }
-    local mouseRooms = {}
-    -- 19 mice for the 19 orchestra instruments across the 20 rooms (always include attic + 18 of 19 standard rooms)
-    local standardIds = {}
-    for _, r in ipairs(Rooms.LIST) do
-        if r.id ~= "attic" then
-            table.insert(standardIds, r.id)
-        end
-    end
-    local skipIdx = love.math.random(1, #standardIds)
-    for i, id in ipairs(standardIds) do
-        mouseRooms[id] = (i ~= skipIdx)
-    end
-    mouseRooms["attic"] = true
 
     App.session = {
         difficulty = self.difficulty,
@@ -121,12 +108,15 @@ function StartMenu:startNewGame()
         trapsLeft = trapsByDiff[self.difficulty] or 10,
         caughtMice = {},
         caughtCount = 0,
-        mouseRooms = mouseRooms,
+        roomQueue = {},
+        activeMouseRoom = nil,
+        mouseRooms = {},
         seenIntros = {},
         foundInstruments = {},
         lastInstrument = nil,
         buildIndex = love.math.random(1, 3),
     }
+    Rooms.initSessionRooms(App.session)
     SceneManager.switch(App.states.hotel_hub)
 end
 
@@ -142,6 +132,7 @@ function StartMenu:loadSavedGame()
         return
     end
     App.session = saved
+    Rooms.normalizeSession(App.session)
     AudioQueue.setMusicEnabled(App.session.musicEnabled ~= false)
     SceneManager.switch(App.states.hotel_hub)
 end

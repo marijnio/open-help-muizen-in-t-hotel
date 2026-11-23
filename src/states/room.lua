@@ -8,6 +8,7 @@ local Hotzone = require("src.core.hotzone")
 local SceneManager = require("src.core.scene_manager")
 local Traps = require("src.core.traps")
 local VideoPlayer = require("src.core.video_player")
+local Rooms = require("src.data.rooms")
 
 local Room = {}
 
@@ -68,7 +69,7 @@ function Room:enter(params)
     self.wipeProgress = 0
 
     -- Place mouse in a valid hiding spot if this room still has a mouse
-    self.hasMouse = App.session.mouseRooms and App.session.mouseRooms[self.room.id] == true
+    self.hasMouse = Rooms.isActiveMouseRoom(App.session, self.room.id)
     self.mouseSpot = nil
     if self.hasMouse then
         local candidates = {}
@@ -291,15 +292,7 @@ end
 function Room:catchMouse(catchX, catchY)
     self.hasMouse = false
     self.mouseSpot = nil
-    App.session.mouseRooms[self.room.id] = false
-    App.session.caughtMice = App.session.caughtMice or {}
-    App.session.caughtMice[self.room.id] = true
-
-    local count = 0
-    for _, v in pairs(App.session.caughtMice) do
-        if v then count = count + 1 end
-    end
-    App.session.caughtCount = count
+    Rooms.markRoomCaught(App.session, self.room.id)
 
     self.traps.active = nil
     self.traps.menuOpen = false

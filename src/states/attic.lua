@@ -7,6 +7,7 @@ local DirectorStage = require("src.core.director_stage")
 local Hotzone = require("src.core.hotzone")
 local SceneManager = require("src.core.scene_manager")
 local Traps = require("src.core.traps")
+local Rooms = require("src.data.rooms")
 
 local Attic = {}
 
@@ -42,7 +43,7 @@ function Attic:enter()
     self.toastTimer = 0
     self.pulseTimer = 0
 
-    self.hasMouse = App.session.mouseRooms and App.session.mouseRooms["attic"] == true
+    self.hasMouse = Rooms.isActiveMouseRoom(App.session, "attic")
     if self.hasMouse then
         self.mouseRoom = love.math.random(1, 6)
         self.mouseSpot = love.math.random(1, 3)
@@ -199,15 +200,7 @@ function Attic:catchMouse()
     self.hasMouse = false
     self.mouseRoom = nil
     self.mouseSpot = nil
-    App.session.mouseRooms["attic"] = false
-    App.session.caughtMice = App.session.caughtMice or {}
-    App.session.caughtMice["attic"] = true
-
-    local count = 0
-    for _, v in pairs(App.session.caughtMice) do
-        if v then count = count + 1 end
-    end
-    App.session.caughtCount = count
+    Rooms.markRoomCaught(App.session, "attic")
 
     AudioQueue.playSfx("dxr/shared/sounds/s_821.wav", 0.9)
     AudioQueue.clearAndPlay({ group = "endsound", key = "atticend" })
