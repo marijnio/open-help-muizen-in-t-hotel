@@ -9,23 +9,14 @@ local Rooms = require("src.data.rooms")
 
 local Orch = {}
 
-local function pickBuildTrack(latestId)
+local function pickBuildTrack(foundCount)
     local buildKey = "build" .. tostring(App.session.buildIndex or 1)
-    local found = (App.session and App.session.foundInstruments) or {}
-    if latestId then
-        return buildKey, latestId
-    end
     local order = Assets.getMusicBuild(buildKey)
-    local best = nil
-    if order then
-        for _, tok in ipairs(order) do
-            local id = Rooms.normalizeInstrumentId(tok)
-            if found[id] then
-                best = id
-            end
-        end
+    if order and #order > 0 then
+        local idx = math.max(1, math.min(#order, foundCount or 1))
+        return buildKey, Rooms.normalizeInstrumentId(order[idx])
     end
-    return buildKey, best or (App.session and App.session.lastInstrument) or "drums"
+    return buildKey, (App.session and App.session.lastInstrument) or "drums"
 end
 
 function Orch:enter(params)
@@ -55,7 +46,7 @@ function Orch:enter(params)
         end
     end
 
-    local buildKey, trackKey = pickBuildTrack(params.latestInstrument)
+    local buildKey, trackKey = pickBuildTrack(self.foundCount)
     local groupName = "music_" .. buildKey
     self.elapsed = 0
     self.musicStarted = false

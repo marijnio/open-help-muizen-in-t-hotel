@@ -15,20 +15,14 @@ local REJECT_COOLDOWN = 1.0
 
 local function pickTargetInstrument()
     App.session.foundInstruments = App.session.foundInstruments or {}
-    local buildKey = "build" .. tostring(App.session.buildIndex or 1)
-    local order = Assets.getMusicBuild(buildKey)
-    if order then
-        for _, tok in ipairs(order) do
-            local id = Rooms.normalizeInstrumentId(tok)
-            if not App.session.foundInstruments[id] and Rooms.INSTRUMENTS_BY_ID[id] then
-                return Rooms.INSTRUMENTS_BY_ID[id]
-            end
-        end
-    end
+    local remaining = {}
     for _, inst in ipairs(Rooms.INSTRUMENTS) do
         if not App.session.foundInstruments[inst.id] then
-            return inst
+            table.insert(remaining, inst)
         end
+    end
+    if #remaining > 0 then
+        return remaining[love.math.random(1, #remaining)]
     end
     return Rooms.INSTRUMENTS[1]
 end
@@ -44,7 +38,8 @@ function Instrum:enter(params)
 
     self.target = pickTargetInstrument()
     self.selectFrame = (self.spans["select"] and self.spans["select"].startFrame) or 4
-    self.mode = "select" -- select | reject | accept_intro | accept_loop | bored
+    self.mode = "select"
+    -- select | reject | accept_intro | accept_loop | bored
     self.animSpan = nil
     self.animFrameFloat = self.selectFrame
     self.idleTimer = 0
@@ -116,7 +111,7 @@ function Instrum:buildHotzones()
                     if self:canChooseInstrument() then
                         self:chooseFamily(fam)
                     end
-                end,
+                end
             })
         end
     end
@@ -129,7 +124,7 @@ function Instrum:buildHotzones()
         h = 36,
         onClick = function()
             self:completeMatching()
-        end,
+        end
     })
 
     self.hotzones:add({
@@ -140,10 +135,12 @@ function Instrum:buildHotzones()
         h = 36,
         onClick = function()
             AudioQueue.pauseAll()
-            Traps.openCatHint("cathel10", function()
-                AudioQueue.resumeAll()
-            end)
-        end,
+            Traps.openCatHint(
+                "cathel10", function()
+                    AudioQueue.resumeAll()
+                end
+            )
+        end
     })
 end
 
@@ -199,11 +196,13 @@ function Instrum:completeMatching()
     App.session.foundInstruments = App.session.foundInstruments or {}
     App.session.foundInstruments[self.target.id] = true
     App.session.lastInstrument = self.target.id
-    SceneManager.switch(App.states.orch, {
-        roomTitle = self.roomTitle,
-        latestInstrument = self.target.id,
-        previewOnly = false,
-    })
+    SceneManager.switch(
+        App.states.orch, {
+            roomTitle = self.roomTitle,
+            latestInstrument = self.target.id,
+            previewOnly = false
+        }
+    )
 end
 
 function Instrum:update(dt)
