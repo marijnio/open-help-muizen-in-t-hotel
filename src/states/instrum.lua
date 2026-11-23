@@ -11,6 +11,8 @@ local Rooms = require("src.data.rooms")
 
 local Instrum = {}
 
+local REJECT_COOLDOWN = 1.0
+
 local function pickTargetInstrument()
     App.session.foundInstruments = App.session.foundInstruments or {}
     local buildKey = "build" .. tostring(App.session.buildIndex or 1)
@@ -49,11 +51,28 @@ function Instrum:enter(params)
     self.soloTimer = 0
     self.soloStarted = false
     self.hoveredFamily = nil
+    self.rejectCooldown = 0
+    self.rejectSfxSource = nil
 
     self:buildHotzones()
 end
 
+function Instrum:stopRejectSfx()
+    if self.rejectSfxSource then
+        self.rejectSfxSource:stop()
+        self.rejectSfxSource = nil
+    end
+end
+
+function Instrum:canChooseInstrument()
+    if self.rejectCooldown > 0 then
+        return false
+    end
+    return self.mode == "select" or self.mode == "bored" or self.mode == "reject"
+end
+
 function Instrum:exit()
+    self:stopRejectSfx()
     AudioQueue.stopAll()
     Cursor.reset()
 end
@@ -90,7 +109,7 @@ function Instrum:buildHotzones()
                     end
                 end,
                 onClick = function()
-                    if self.mode == "select" or self.mode == "bored" then
+                    if self:canChooseInstrument() then
                         self:chooseFamily(fam)
                     end
                 end,
@@ -126,7 +145,9 @@ end
 
 function Instrum:chooseFamily(fam)
     self.idleTimer = 0
+    self:stopRejectSfx()
     if fam.family == self.target.family then
+        self.rejectCooldown = 0
         App.session.foundInstruments = App.session.foundInstruments or {}
         App.session.foundInstruments[self.target.id] = true
         App.session.lastInstrument = self.target.id
@@ -150,8 +171,9 @@ function Instrum:chooseFamily(fam)
             self.animFrameFloat = loopSpan and loopSpan.startFrame or self.selectFrame
         end
     else
+        self.rejectCooldown = REJECT_COOLDOWN
         if fam.rejectSfx then
-            AudioQueue.playSfx(fam.rejectSfx, 0.85)
+            self.rejectSfxSource = AudioQueue.playSfx(fam.rejectSfx, 0.85)
         end
         local rSpan = self.spans[fam.rejectLabel] or self.spans["reject general"]
         if rSpan then
@@ -159,10 +181,14 @@ function Instrum:chooseFamily(fam)
             self.animSpan = rSpan
             self.animFrameFloat = rSpan.startFrame
         end
+        if not App.isTouchMode and App.lastVx and App.lastVy then
+            self:mousemoved(App.lastVx, App.lastVy)
+        end
     end
 end
 
 function Instrum:completeMatching()
+    self:stopRejectSfx()
     App.session.foundInstruments = App.session.foundInstruments or {}
     App.session.foundInstruments[self.target.id] = true
     App.session.lastInstrument = self.target.id
@@ -174,6 +200,13 @@ function Instrum:completeMatching()
 end
 
 function Instrum:update(dt)
+    if self.rejectCooldown > 0 then
+        self.rejectCooldown = math.max(0, self.rejectCooldown - dt)
+        if self.rejectCooldown == 0 and not App.isTouchMode and App.lastVx and App.lastVy then
+            self:mousemoved(App.lastVx, App.lastVy)
+        end
+    end
+
     if self.mode == "select" then
         self.idleTimer = self.idleTimer + dt
         if self.idleTimer >= 14.0 and self.spans["bored"] then
@@ -225,7 +258,8 @@ function Instrum:mousemoved(vx, vy)
         return
     end
     local hit = self.hotzones:updateHover(vx, vy, App.isTouchMode)
-    Cursor.setSystem(hit and "hand" or "arrow")
+    local clickable = (hit ~= nil) and (not hit.family or self:canChooseInstrument())
+    Cursor.setSystem(clickable and "hand" or "arrow")
 end
 
 function Instrum:mousepressed(vx, vy, button)

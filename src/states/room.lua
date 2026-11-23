@@ -14,9 +14,31 @@ local Room = {}
 local DIFFICULTY_FPS = { [1] = 8, [2] = 12, [3] = 16 }
 local WIPE_DURATION = 1.4
 local HINT_VIDEOS = { "cathelp7", "cathelp9", "cathel10", "cathel11" }
+local CATCH_DANGLING_CASTS = { 707, 708, 709, 710, 711 }
+local CATCH_HANG_DURATION = 0.45
+local CATCH_MOVE_DURATION = 0.50
+local CATCH_HOLD_DURATION = 0.16
+local CATCH_WIGGLE_FPS = 12
 
 local function pointInRect(px, py, r)
     return px >= r.x and px < (r.x + r.w) and py >= r.y and py < (r.y + r.h)
+end
+
+local function findCaughtPreVideoEnd(score, caughtSpan)
+    if score and score.frames and score.casts then
+        for f = caughtSpan.startFrame, caughtSpan.endFrame do
+            local frame = score.frames[f]
+            if frame then
+                for _, sp in ipairs(frame) do
+                    local cast = score.casts[sp.cast]
+                    if cast and cast.type == "digital_video" then
+                        return math.max(caughtSpan.startFrame, f - 1)
+                    end
+                end
+            end
+        end
+    end
+    return math.min(caughtSpan.endFrame, caughtSpan.startFrame + 7)
 end
 
 function Room:enter(params)
@@ -39,6 +61,7 @@ function Room:enter(params)
     self.animSpan = nil
     self.animFrameFloat = 1
     self.animDestSpot = nil
+    self.catchAnim = nil
     self.caughtPlayer = nil
     self.toast = nil
     self.toastTimer = 0
@@ -236,6 +259,8 @@ function Room:currentFrameNumber()
 end
 
 function Room:startCaughtVideo()
+    self.catchAnim = nil
+    Cursor.reset()
     if self.room.mov then
         AudioQueue.stopAll()
         self.mode = "caught_video"
@@ -263,7 +288,7 @@ function Room:finishRoomCapture()
     SceneManager.switch(App.states.instrum, { roomTitle = self.room.title })
 end
 
-function Room:catchMouse()
+function Room:catchMouse(catchX, catchY)
     self.hasMouse = false
     self.mouseSpot = nil
     App.session.mouseRooms[self.room.id] = false
@@ -276,16 +301,40 @@ function Room:catchMouse()
     end
     App.session.caughtCount = count
 
+    self.traps.active = nil
+    self.traps.menuOpen = false
+    Cursor.setVisible(false)
+
     AudioQueue.stopMusic()
     AudioQueue.playSfx("dxr/shared/sounds/s_821.wav", 0.9)
 
+    local startX = math.max(0, math.min(640, catchX or App.lastVx or 320))
+    local startY = math.max(0, math.min(440, catchY or App.lastVy or 240))
     local caughtSpan = self.spans["caught"]
-    if caughtSpan then
+    local target = self.meta and self.meta.pos1
+
+    if caughtSpan or target then
         self.mode = "caught"
-        -- Trim the trailing DigitalVideo placeholder frames right before blanky
-        local endF = math.min(caughtSpan.endFrame, caughtSpan.startFrame + 7)
-        self.animSpan = { startFrame = caughtSpan.startFrame, endFrame = endF }
-        self.animFrameFloat = caughtSpan.startFrame
+        if caughtSpan then
+            local endF = findCaughtPreVideoEnd(self.score, caughtSpan)
+            self.animSpan = { startFrame = caughtSpan.startFrame, endFrame = endF }
+            self.animFrameFloat = caughtSpan.startFrame
+        else
+            self.animSpan = nil
+        end
+        self.catchAnim = {
+            phase = "hang",
+            timer = 0,
+            wiggleTimer = 0,
+            wiggleIdx = 1,
+            x = startX,
+            y = startY,
+            startX = startX,
+            startY = startY,
+            targetX = target and target.x or startX,
+            targetY = target and target.y or startY,
+            hasTarget = (target ~= nil),
+        }
     else
         self:startCaughtVideo()
     end
@@ -310,6 +359,65 @@ function Room:update(dt)
     if self.mode == "caught_video" then
         if self.caughtPlayer then
             self.caughtPlayer:update(dt)
+        end
+        return
+    end
+
+    if self.mode == "caught" then
+        local anim = self.catchAnim
+        if not anim then
+            self:startCaughtVideo()
+            return
+        end
+
+        anim.wiggleTimer = anim.wiggleTimer + dt
+        local wiggleStep = 1 / CATCH_WIGGLE_FPS
+        while anim.wiggleTimer >= wiggleStep do
+            anim.wiggleTimer = anim.wiggleTimer - wiggleStep
+            anim.wiggleIdx = (anim.wiggleIdx % #CATCH_DANGLING_CASTS) + 1
+        end
+
+        anim.timer = anim.timer + dt
+        if anim.phase == "hang" then
+            if not App.isTouchMode then
+                anim.x = math.max(0, math.min(640, App.lastVx or anim.x))
+                anim.y = math.max(0, math.min(440, App.lastVy or anim.y))
+            end
+            if self.animSpan then
+                self.animFrameFloat = self.animSpan.startFrame
+            end
+            if anim.timer >= CATCH_HANG_DURATION then
+                if anim.hasTarget then
+                    anim.phase = "move"
+                    anim.timer = 0
+                    anim.startX = anim.x
+                    anim.startY = anim.y
+                else
+                    self:startCaughtVideo()
+                end
+            end
+        elseif anim.phase == "move" then
+            local t = math.min(1, anim.timer / CATCH_MOVE_DURATION)
+            anim.x = anim.startX + (anim.targetX - anim.startX) * t
+            anim.y = anim.startY + (anim.targetY - anim.startY) * t
+            if self.animSpan then
+                self.animFrameFloat = self.animSpan.startFrame + (self.animSpan.endFrame - self.animSpan.startFrame) * t
+            end
+            if anim.timer >= CATCH_MOVE_DURATION then
+                anim.x = anim.targetX
+                anim.y = anim.targetY
+                anim.phase = "hold"
+                anim.timer = 0
+                if self.animSpan then
+                    self.animFrameFloat = self.animSpan.endFrame
+                end
+            end
+        elseif anim.phase == "hold" then
+            anim.x = anim.targetX
+            anim.y = anim.targetY
+            if anim.timer >= CATCH_HOLD_DURATION then
+                self:startCaughtVideo()
+            end
         end
         return
     end
@@ -357,10 +465,7 @@ function Room:update(dt)
 
     self.animFrameFloat = self.animFrameFloat + dt * playFps
     if self.animFrameFloat > self.animSpan.endFrame + 0.99 then
-        if self.mode == "caught" then
-            self:startCaughtVideo()
-            return
-        elseif self.mode == "mouse_run" then
+        if self.mode == "mouse_run" then
             AudioQueue.playSfx("dxr/shared/sounds/s_822.wav", 0.65)
             self.mouseSpot = self.animDestSpot or self.mouseSpot
             if self.traps.active and self.traps.active.sprung then
@@ -374,7 +479,7 @@ function Room:update(dt)
 end
 
 function Room:mousemoved(vx, vy)
-    if self.mode == "entering" or self.mode == "caught_video" then return end
+    if self.mode == "entering" or self.mode == "caught" or self.mode == "caught_video" then return end
     if self.mode == "mouse_run" then
         Cursor.setSystem("hand")
         return
@@ -387,6 +492,9 @@ function Room:mousepressed(vx, vy, button)
     if button ~= 1 then return end
     if self.mode == "entering" then
         self:finishEntering()
+        return
+    end
+    if self.mode == "caught" then
         return
     end
     if self.mode == "caught_video" then
@@ -411,7 +519,7 @@ function Room:mousepressed(vx, vy, button)
             local pad = App.isTouchMode and 26 or 14
             if vx >= (bounds.x - pad) and vx <= (bounds.x + bounds.w + pad)
                     and vy >= (bounds.y - pad) and vy <= (bounds.y + bounds.h + pad) then
-                self:catchMouse()
+                self:catchMouse(vx, vy)
                 return
             end
         end
@@ -442,6 +550,9 @@ function Room:keypressed(key)
             return true
         end
         return false
+    end
+    if self.mode == "caught" then
+        return true
     end
     if self.mode == "caught_video" then
         if key == "escape" or key == "space" or key == "return" then
@@ -485,7 +596,16 @@ function Room:draw(vx, vy)
     end
 
     local puppetSprites = nil
-    if self.mode ~= "caught" and self.meta.loopChannel and self.meta.loopChannel > 0 then
+    if self.mode == "caught" and self.catchAnim then
+        puppetSprites = {
+            [39] = {
+                ch = 39,
+                cast = CATCH_DANGLING_CASTS[self.catchAnim.wiggleIdx] or 707,
+                x = math.floor(self.catchAnim.x + 0.5),
+                y = math.floor(self.catchAnim.y + 0.5),
+            },
+        }
+    elseif self.mode ~= "caught" and self.meta.loopChannel and self.meta.loopChannel > 0 then
         local idleFrame = self:currentIdleFrame()
         local loopSp = DirectorStage.getChannelSprite(self.dxrKey, idleFrame, self.meta.loopChannel)
         if not loopSp then
@@ -513,8 +633,10 @@ function Room:draw(vx, vy)
         love.graphics.rectangle("fill", wipeX, 0, 2, 480)
     end
 
-    Traps.drawActive(self.traps)
-    Traps.drawToolbarHud(self.traps, self.room.title, self.hasMouse)
+    if self.mode ~= "caught" then
+        Traps.drawActive(self.traps)
+        Traps.drawToolbarHud(self.traps, self.room.title, self.hasMouse)
+    end
 
     if self.toast then
         love.graphics.setColor(0.08, 0.10, 0.14, 0.92)
