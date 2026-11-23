@@ -541,6 +541,26 @@ function Room:mousepressed(vx, vy, button)
 end
 
 function Room:keypressed(key)
+    if App.debugMode and key == "c" and self.hasMouse and self.mode ~= "caught" and self.mode ~= "caught_video" then
+        local cx, cy = 320, 240
+        if self.mode == "mouse_run" then
+            local bounds = DirectorStage.getMouseBounds(self.dxrKey, self:currentFrameNumber(), "shared")
+            if bounds then
+                cx, cy = bounds.cx, bounds.cy
+            end
+        elseif self.mouseSpot and self.meta and self.meta.spots then
+            for _, sp in ipairs(self.meta.spots) do
+                if sp.spot == self.mouseSpot then
+                    cx = sp.x + sp.w * 0.5
+                    cy = sp.y + sp.h * 0.5
+                    break
+                end
+            end
+        end
+        self.wipeProgress = 1
+        self:catchMouse(cx, cy)
+        return true
+    end
     if self.mode == "entering" then
         if key == "space" or key == "return" then
             self:finishEntering()
@@ -654,9 +674,9 @@ function Room:draw(vx, vy)
                 love.graphics.rectangle("line", b.x - 14, b.y - 14, b.w + 28, b.h + 28)
             end
         end
-        if self.mouseSpot then
+        if self.hasMouse then
             love.graphics.setColor(0.2, 1, 0.4, 1)
-            love.graphics.print("mouseSpot=" .. tostring(self.mouseSpot), 10, 24)
+            love.graphics.print("mouseSpot=" .. tostring(self.mouseSpot) .. "  [C = auto-catch]", 10, 24)
         end
     end
 

@@ -327,6 +327,10 @@ function Attic:mousepressed(vx, vy, button)
 end
 
 function Attic:keypressed(key)
+    if App.debugMode and key == "c" and self.hasMouse and self.mode ~= "caught" then
+        self:catchMouse()
+        return true
+    end
     if key == "escape" then
         if self.traps.menuOpen then
             self.traps.menuOpen = false
@@ -378,6 +382,14 @@ function Attic:draw(vx, vy)
 
     if App.debugMode then
         self.hotzones:drawDebug(vx, vy)
+        if self.hasMouse then
+            love.graphics.setColor(0.2, 1, 0.4, 1)
+            love.graphics.print(
+                string.format("mouseRoom=%s mouseSpot=%s  [C = auto-catch]", tostring(self.mouseRoom), tostring(self.mouseSpot)),
+                10,
+                24
+            )
+        end
     end
     love.graphics.pop()
 end
