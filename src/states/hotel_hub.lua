@@ -1,5 +1,5 @@
 -- Hotel Cross-Section Hub (GGMDMENU Frame 14) with Mouse-Detector TV scanner,
--- Fat Lazy Cat hint video (CATHELP6), Save & Exit dialog, and Milestone 1 room preview.
+-- Fat Lazy Cat hint video (CATHELP6), and Save & Exit dialog.
 
 local Assets = require("src.core.assets")
 local AudioQueue = require("src.core.audio_queue")
@@ -16,31 +16,21 @@ local HotelHub = {}
 
 local DETECTOR_BLINK_INTERVAL = 0.25
 
--- Modal overlay for Fat Lazy Cat hint video (320x200) or Room intro preview (640x480)
+-- Modal overlay for Fat Lazy Cat hint video (320x200)
 local MediaPreviewOverlay = {}
 
 function MediaPreviewOverlay:enter(params)
     Cursor.reset()
     AudioQueue.stopAll()
     self.title = params.title or ""
-    self.roomDxr = params.roomDxr
     self.isHint = params.isHint
-    self.showingRoomBg = false
     self.player = params.videoKey and VideoPlayer.new(params.videoKey, {
         onFinish = function()
-            if self.roomDxr then
-                self.showingRoomBg = true
-            else
-                SceneManager.clearOverlay()
-            end
+            SceneManager.clearOverlay()
         end,
     }) or nil
     if not self.player then
-        if self.roomDxr then
-            self.showingRoomBg = true
-        else
-            SceneManager.clearOverlay()
-        end
+        SceneManager.clearOverlay()
     end
 end
 
@@ -51,28 +41,33 @@ function MediaPreviewOverlay:exit()
     end
 end
 
+function MediaPreviewOverlay:onFocus(focused)
+    if not self.player then return end
+    if focused then
+        self.player:resume()
+    else
+        self.player:pause()
+    end
+end
+
 function MediaPreviewOverlay:update(dt)
-    if self.player and not self.showingRoomBg then
+    if self.player then
         self.player:update(dt)
     end
 end
 
-function MediaPreviewOverlay:mousepressed()
-    if self.player and not self.showingRoomBg then
+function MediaPreviewOverlay:mousepressed(_vx, _vy, button)
+    if button ~= 1 then return end
+    if self.player then
         self.player:stop()
-        if self.roomDxr then
-            self.showingRoomBg = true
-        else
-            SceneManager.clearOverlay()
-        end
-    else
-        SceneManager.clearOverlay()
+        self.player = nil
     end
+    SceneManager.clearOverlay()
 end
 
 function MediaPreviewOverlay:keypressed(key)
     if key == "escape" or key == "space" or key == "return" then
-        self:mousepressed()
+        self:mousepressed(0, 0, 1)
         return true
     end
     return true
@@ -88,15 +83,6 @@ function MediaPreviewOverlay:draw()
         end
         love.graphics.setColor(1, 0.92, 0.6, 1)
         love.graphics.printf("De Dikke Luie Kater • Klik of Esc om te sluiten", 120, 355, 400, "center")
-    elseif self.showingRoomBg and self.roomDxr then
-        love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.rectangle("fill", 0, 0, 640, 480)
-        local f = DirectorStage.getLabelFrame(self.roomDxr, "loop1") or 22
-        DirectorStage.drawFrame(self.roomDxr, f)
-        love.graphics.setColor(0.08, 0.1, 0.14, 0.88)
-        love.graphics.rectangle("fill", 70, 434, 500, 36, 8, 8)
-        love.graphics.setColor(0.95, 0.85, 0.4, 1)
-        love.graphics.printf(self.title .. " (Kamer-gameplay komt in Milestone 2 • Klik/Esc = Terug)", 76, 445, 488, "center")
     else
         love.graphics.setColor(0, 0, 0, 1)
         love.graphics.rectangle("fill", 0, 0, 640, 480)
@@ -164,6 +150,7 @@ function HotelHub:enter(params)
         w = 56,
         h = 40,
         onClick = function()
+            self.touchSelectedRoomId = nil
             self:promptExit()
         end,
     })
@@ -174,6 +161,7 @@ function HotelHub:enter(params)
         w = 60,
         h = 40,
         onClick = function()
+            self.touchSelectedRoomId = nil
             SceneManager.setOverlay(MediaPreviewOverlay, {
                 title = "Dikke Luie Kater",
                 videoKey = "cathelp6",
@@ -190,6 +178,7 @@ function HotelHub:enter(params)
             w = 84,
             h = 24,
             onClick = function()
+                self.touchSelectedRoomId = nil
                 SceneManager.switch(App.states.orch, { previewOnly = true })
             end,
         })
@@ -299,6 +288,7 @@ function HotelHub:promptExit()
                 key = "return",
                 action = function()
                     Save.write(App.session)
+                    App.inActiveSession = false
                     SceneManager.clearOverlay()
                     SceneManager.switch(App.states.start_menu, { skipResumePrompt = true })
                 end,
@@ -306,6 +296,7 @@ function HotelHub:promptExit()
             {
                 label = "Niet opslaan",
                 action = function()
+                    App.inActiveSession = false
                     SceneManager.clearOverlay()
                     SceneManager.switch(App.states.start_menu, { skipResumePrompt = true })
                 end,
@@ -335,7 +326,12 @@ end
 
 function HotelHub:mousepressed(vx, vy, button)
     if button == 1 then
-        self.hotzones:click(vx, vy)
+        local hit = self.hotzones:click(vx, vy)
+        if not hit then
+            self.touchSelectedRoomId = nil
+            self.detectedRoom = nil
+            self:stopHoverAudio()
+        end
     end
 end
 
@@ -383,7 +379,9 @@ function HotelHub:draw(vx, vy)
     love.graphics.setColor(0.12, 0.14, 0.18, 0.9)
     love.graphics.rectangle("fill", 96, 449, pillW, 24, 5, 5)
     love.graphics.setColor(0.95, 0.92, 0.65, 1)
-    local roomLabel = self.detectedRoom and ("  •  " .. self.detectedRoom.title) or ""
+    local roomLabel = self.detectedRoom
+        and ((App.isTouchMode and "  •  Tik nogmaals: " or "  •  ") .. self.detectedRoom.title)
+        or ""
     love.graphics.printf(
         string.format("Gevangen: %d/19   •   Vallen: %d%s", caught, traps, roomLabel),
         100,
@@ -402,8 +400,20 @@ function HotelHub:draw(vx, vy)
         love.graphics.printf("Orkest", 466, 454, 84, "center")
     end
 
-    -- Draw Mouse-Detector TV Scanner following cursor
-    if (self.scannerVisible or self.touchSelectedRoomId) and vx and vy then
+    -- Draw Mouse-Detector TV Scanner following cursor (or centered on tapped room in touch mode)
+    local scanX, scanY = nil, nil
+    if App.isTouchMode then
+        if self.touchSelectedRoomId then
+            local r = Rooms.BY_ID[self.touchSelectedRoomId]
+            if r then
+                scanX = r.x + r.w * 0.5
+                scanY = r.y + r.h * 0.5
+            end
+        end
+    elseif self.scannerVisible and vx and vy then
+        scanX, scanY = vx, vy
+    end
+    if scanX and scanY then
         local gg = Assets.getDxr("ggmdmenu")
         local castId = (self.detectedRoom and self.blinkOn) and 2 or 1
         local cast = gg and gg.casts[castId]
@@ -411,7 +421,7 @@ function HotelHub:draw(vx, vy)
             local img = Assets.getImage(cast.image, "nearest")
             if img then
                 love.graphics.setColor(1, 1, 1, 1)
-                love.graphics.draw(img, vx - (cast.reg_x or 36), vy - (cast.reg_y or 20))
+                love.graphics.draw(img, scanX - (cast.reg_x or 36), scanY - (cast.reg_y or 20))
             end
         end
     end

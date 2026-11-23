@@ -13,6 +13,9 @@ local AudioQueue = {
     sfxVolume = 0.9,
     voVolume = 1.0,
     paused = false,
+    pauseDepth = 0,
+    pausedVo = false,
+    pausedMusic = false,
 }
 
 local function resolveSource(item, stype)
@@ -48,6 +51,7 @@ end
 function AudioQueue.stopVo()
     AudioQueue.queue = {}
     AudioQueue.gapTimer = 0
+    AudioQueue.pausedVo = false
     if AudioQueue.currentVo then
         AudioQueue.currentVo:stop()
         AudioQueue.currentVo = nil
@@ -77,6 +81,7 @@ function AudioQueue.playMusic(item, opts)
 end
 
 function AudioQueue.stopMusic()
+    AudioQueue.pausedMusic = false
     if AudioQueue.musicSource then
         AudioQueue.musicSource:stop()
         AudioQueue.musicSource = nil
@@ -134,26 +139,44 @@ function AudioQueue.update(dt)
 end
 
 function AudioQueue.pauseAll()
+    AudioQueue.pauseDepth = AudioQueue.pauseDepth + 1
     AudioQueue.paused = true
-    if AudioQueue.currentVo and AudioQueue.currentVo:isPlaying() then
-        AudioQueue.currentVo:pause()
-    end
-    if AudioQueue.musicSource and AudioQueue.musicSource:isPlaying() then
-        AudioQueue.musicSource:pause()
+    if AudioQueue.pauseDepth == 1 then
+        if AudioQueue.currentVo and AudioQueue.currentVo:isPlaying() then
+            AudioQueue.currentVo:pause()
+            AudioQueue.pausedVo = true
+        else
+            AudioQueue.pausedVo = false
+        end
+        if AudioQueue.musicSource and AudioQueue.musicSource:isPlaying() then
+            AudioQueue.musicSource:pause()
+            AudioQueue.pausedMusic = true
+        else
+            AudioQueue.pausedMusic = false
+        end
     end
 end
 
 function AudioQueue.resumeAll()
-    AudioQueue.paused = false
-    if AudioQueue.currentVo then
-        AudioQueue.currentVo:play()
+    if AudioQueue.pauseDepth > 0 then
+        AudioQueue.pauseDepth = AudioQueue.pauseDepth - 1
     end
-    if AudioQueue.musicEnabled and AudioQueue.musicSource then
-        AudioQueue.musicSource:play()
+    if AudioQueue.pauseDepth == 0 then
+        AudioQueue.paused = false
+        if AudioQueue.pausedVo and AudioQueue.currentVo then
+            AudioQueue.currentVo:play()
+        end
+        if AudioQueue.pausedMusic and AudioQueue.musicEnabled and AudioQueue.musicSource then
+            AudioQueue.musicSource:play()
+        end
+        AudioQueue.pausedVo = false
+        AudioQueue.pausedMusic = false
     end
 end
 
 function AudioQueue.stopAll()
+    AudioQueue.pauseDepth = 0
+    AudioQueue.paused = false
     AudioQueue.stopVo()
     AudioQueue.stopMusic()
 end

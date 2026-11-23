@@ -44,7 +44,8 @@ function Intro:update(dt)
     end
 end
 
-function Intro:mousepressed()
+function Intro:mousepressed(_vx, _vy, button)
+    if button ~= 1 then return end
     SceneManager.switch(self.returnState, self.returnParams)
 end
 

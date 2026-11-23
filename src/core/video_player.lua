@@ -20,6 +20,7 @@ function VideoPlayer.new(videoKey, opts)
         currentFrameIdx = 0,
         currentImage = nil,
         audio = nil,
+        audioWasPlaying = false,
         elapsed = 0,
         finished = false,
         paused = false,
@@ -120,16 +121,20 @@ end
 function VideoPlayer:pause()
     self.paused = true
     if self.audio and self.audio:isPlaying() then
+        self.audioWasPlaying = true
         self.audio:pause()
+    else
+        self.audioWasPlaying = false
     end
 end
 
 function VideoPlayer:resume()
     if self.finished then return end
     self.paused = false
-    if self.audio then
+    if self.audio and self.audioWasPlaying then
         self.audio:play()
     end
+    self.audioWasPlaying = false
 end
 
 function VideoPlayer:finish()

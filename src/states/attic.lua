@@ -219,6 +219,10 @@ function Attic:catchMouse()
     self.mouseSpot = nil
     self.mouseCatchLockTimer = 0
     Rooms.markRoomCaught(App.session, "attic")
+    App.session.pendingInstrumentRoom = "Zolder"
+    if App.saveProgress then
+        App.saveProgress()
+    end
 
     AudioQueue.playSfx("dxr/shared/sounds/s_821.wav", 0.9)
     AudioQueue.clearAndPlay({ group = "endsound", key = "atticend" })
@@ -327,6 +331,10 @@ function Attic:mousepressed(vx, vy, button)
                 return
             end
         end
+        if not pointInRect(vx, vy, { x = 530, y = 444, w = 46, h = 34 }) then
+            self.traps.menuOpen = false
+            return
+        end
     end
 
     if self.mode == "mouse_run" then
@@ -343,6 +351,8 @@ function Attic:mousepressed(vx, vy, button)
         end
         if pointInRect(vx, vy, Traps.EXIT_RECT) then
             SceneManager.switch(App.states.hotel_hub)
+        elseif pointInRect(vx, vy, { x = 576, y = 442, w = 60, h = 36 }) then
+            self.hotzones:click(vx, vy)
         end
         return
     end

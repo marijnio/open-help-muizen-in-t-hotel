@@ -2,6 +2,7 @@
 
 local AudioQueue = require("src.core.audio_queue")
 local Cursor = require("src.core.cursor")
+local Save = require("src.core.save")
 local SceneManager = require("src.core.scene_manager")
 local VideoPlayer = require("src.core.video_player")
 
@@ -10,6 +11,8 @@ local Finale = {}
 function Finale:enter()
     Cursor.reset()
     AudioQueue.stopAll()
+    App.inActiveSession = false
+    Save.delete()
     self.player = VideoPlayer.new("endseq", {
         onFinish = function()
             SceneManager.switch(App.states.credits)
@@ -38,7 +41,8 @@ function Finale:update(dt)
     end
 end
 
-function Finale:mousepressed()
+function Finale:mousepressed(_vx, _vy, button)
+    if button ~= 1 then return end
     SceneManager.switch(App.states.credits)
 end
 

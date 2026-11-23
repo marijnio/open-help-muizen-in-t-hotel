@@ -14,7 +14,7 @@ function ConfirmDialog:enter(params)
     }
     self.hotzones = Hotzone.new()
 
-    local bw, bh = 130, 36
+    local bw, bh = 130, 42
     local gap = 14
     local count = #self.buttons
     local totalW = count * bw + (count - 1) * gap
@@ -97,7 +97,7 @@ function ConfirmDialog:draw(vx, vy)
         love.graphics.setColor(0.8, 0.85, 0.9, 1)
         love.graphics.rectangle("line", b._x, b._y, b._w, b._h, 6, 6)
         love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.printf(b.label, b._x, b._y + 10, b._w, "center")
+        love.graphics.printf(b.label, b._x, b._y + 13, b._w, "center")
     end
 
     if App.debugMode then

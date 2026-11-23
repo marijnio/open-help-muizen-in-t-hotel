@@ -22,7 +22,8 @@ function StartMenu:enter(params)
     self.musicEnabled = (App.session.musicEnabled ~= false)
     self.notice = nil
     self.noticeTimer = 0
-    self.hasSave = Save.exists()
+    self.saveSummary = Save.peekSummary()
+    self.hasSave = (self.saveSummary ~= nil)
 
     AudioQueue.setMusicEnabled(self.musicEnabled)
     if self.musicEnabled then
@@ -74,7 +75,7 @@ function StartMenu:showOptions()
         })
     end })
     if self.hasSave then
-        self.hotzones:add({ id = "load_game", x = 80, y = 446, w = 124, h = 28, onClick = function() self:loadSavedGame() end })
+        self.hotzones:add({ id = "load_game", x = 80, y = 446, w = 148, h = 28, onClick = function() self:loadSavedGame() end })
     end
     Cursor.reset()
 end
@@ -114,16 +115,19 @@ function StartMenu:startNewGame()
         seenIntros = {},
         foundInstruments = {},
         lastInstrument = nil,
+        pendingInstrumentRoom = nil,
         buildIndex = love.math.random(1, 3),
     }
     Rooms.initSessionRooms(App.session)
+    App.inActiveSession = true
     SceneManager.switch(App.states.hotel_hub)
 end
 
 function StartMenu:loadSavedGame()
     local saved = Save.load()
     if not saved then
-        self.hasSave = Save.exists()
+        self.saveSummary = Save.peekSummary()
+        self.hasSave = (self.saveSummary ~= nil)
         if self.mode ~= "options" then
             self:showOptions()
         end
@@ -133,8 +137,15 @@ function StartMenu:loadSavedGame()
     end
     App.session = saved
     Rooms.normalizeSession(App.session)
+    App.inActiveSession = true
     AudioQueue.setMusicEnabled(App.session.musicEnabled ~= false)
-    SceneManager.switch(App.states.hotel_hub)
+    if App.session.pendingInstrumentRoom then
+        SceneManager.switch(App.states.instrum, { roomTitle = App.session.pendingInstrumentRoom })
+    elseif (App.session.caughtCount or 0) >= Rooms.TOTAL_MICE then
+        SceneManager.switch(App.states.finale)
+    else
+        SceneManager.switch(App.states.hotel_hub)
+    end
 end
 
 function StartMenu:update(dt)
@@ -197,6 +208,25 @@ function StartMenu:draw(vx, vy)
     love.graphics.push("all")
     if self.mode == "resume_prompt" then
         DirectorStage.drawFrame("ggmdmenu", self.resumeFrameNum)
+        if self.saveSummary then
+            love.graphics.setColor(0.08, 0.10, 0.14, 0.90)
+            love.graphics.rectangle("fill", 120, 446, 400, 26, 6, 6)
+            love.graphics.setColor(0.65, 0.85, 0.68, 1)
+            love.graphics.rectangle("line", 120, 446, 400, 26, 6, 6)
+            love.graphics.setColor(0.95, 0.92, 0.68, 1)
+            love.graphics.printf(
+                string.format(
+                    "Opgeslagen spel: %d/19 muizen  •  Niveau %d  •  Vallen: %d",
+                    self.saveSummary.caughtCount,
+                    self.saveSummary.difficulty,
+                    self.saveSummary.trapsLeft
+                ),
+                124,
+                452,
+                392,
+                "center"
+            )
+        end
     else
         DirectorStage.drawFrame("ggmdmenu", self.frameNum, {
             channelCasts = {
@@ -207,8 +237,15 @@ function StartMenu:draw(vx, vy)
 
         -- Subtle modern helper pills at bottom corners
         drawPill(510, 446, 120, 28, "Intro bekijken", self.hotzones.hoveredId == "watch_intro")
-        if self.hasSave then
-            drawPill(80, 446, 124, 28, "Verder spelen", self.hotzones.hoveredId == "load_game")
+        if self.hasSave and self.saveSummary then
+            drawPill(
+                80,
+                446,
+                148,
+                28,
+                string.format("Verder (%d/19)", self.saveSummary.caughtCount),
+                self.hotzones.hoveredId == "load_game"
+            )
         end
     end
 

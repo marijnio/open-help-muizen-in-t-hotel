@@ -79,6 +79,7 @@ function Rooms.initSessionRooms(session)
     session.caughtCount = 0
     session.roomQueue = queue
     session.activeMouseRoom = queue[1]
+    session.pendingInstrumentRoom = nil
     syncMouseRooms(session)
     return session
 end
@@ -86,12 +87,36 @@ end
 function Rooms.normalizeSession(session)
     if not session then return nil end
 
-    session.caughtMice = session.caughtMice or {}
+    local diff = math.floor(tonumber(session.difficulty) or 1)
+    if diff < 1 then diff = 1 elseif diff > 3 then diff = 3 end
+    session.difficulty = diff
+    session.musicEnabled = (session.musicEnabled ~= false)
+
+    local defaultTraps = ({ [1] = 10, [2] = 5, [3] = 0 })[diff] or 10
+    if type(session.trapsLeft) ~= "number" or session.trapsLeft ~= session.trapsLeft then
+        session.trapsLeft = defaultTraps
+    else
+        session.trapsLeft = math.max(0, math.floor(session.trapsLeft))
+    end
+
+    local buildIdx = math.floor(tonumber(session.buildIndex) or 1)
+    if buildIdx < 1 or buildIdx > 3 then
+        buildIdx = 1
+    end
+    session.buildIndex = buildIdx
+
+    if type(session.seenIntros) ~= "table" then
+        session.seenIntros = {}
+    end
+
+    local rawCaught = type(session.caughtMice) == "table" and session.caughtMice or {}
+    local cleanCaught = {}
     local caughtCount = 0
     local standardCaught = 0
     local atticCaught = false
-    for id, v in pairs(session.caughtMice) do
+    for id, v in pairs(rawCaught) do
         if v and Rooms.BY_ID[id] then
+            cleanCaught[id] = true
             caughtCount = caughtCount + 1
             if id == "attic" then
                 atticCaught = true
@@ -100,7 +125,49 @@ function Rooms.normalizeSession(session)
             end
         end
     end
+    session.caughtMice = cleanCaught
     session.caughtCount = caughtCount
+
+    local rawFound = type(session.foundInstruments) == "table" and session.foundInstruments or {}
+    local cleanFound = {}
+    local foundCount = 0
+    for id, v in pairs(rawFound) do
+        if v and Rooms.INSTRUMENTS_BY_ID[id] then
+            cleanFound[id] = true
+            foundCount = foundCount + 1
+        end
+    end
+    session.foundInstruments = cleanFound
+
+    if not Rooms.INSTRUMENTS_BY_ID[session.lastInstrument] then
+        session.lastInstrument = nil
+    end
+
+    if type(session.pendingInstrumentRoom) == "string"
+        and session.pendingInstrumentRoom ~= ""
+        and caughtCount > 0
+        and foundCount < caughtCount
+    then
+        -- Preserve pending instrument room when a mouse was caught right before matching
+    else
+        session.pendingInstrumentRoom = nil
+    end
+
+    local expectedFound = math.max(0, caughtCount - (session.pendingInstrumentRoom and 1 or 0))
+    if foundCount < expectedFound then
+        for _, inst in ipairs(Rooms.INSTRUMENTS) do
+            if foundCount >= expectedFound then
+                break
+            end
+            if not cleanFound[inst.id] then
+                cleanFound[inst.id] = true
+                foundCount = foundCount + 1
+                if not session.lastInstrument then
+                    session.lastInstrument = inst.id
+                end
+            end
+        end
+    end
 
     if caughtCount >= Rooms.TOTAL_MICE then
         session.roomQueue = {}

@@ -24,6 +24,9 @@ function Viewport.recalculate()
             sx, sy, sw, sh = ax, ay, aw, ah
         end
     end
+    if not sw or not sh or sw <= 0 or sh <= 0 then
+        return
+    end
 
     local scaleX = sw / Viewport.VIRTUAL_W
     local scaleY = sh / Viewport.VIRTUAL_H
@@ -71,6 +74,9 @@ function Viewport.endDraw()
 end
 
 function Viewport.screenToVirtual(sx, sy)
+    if not Viewport.scale or Viewport.scale <= 0 then
+        return 0, 0, false
+    end
     local vx = (sx - Viewport.offsetX) / Viewport.scale
     local vy = (sy - Viewport.offsetY) / Viewport.scale
     local inside = vx >= 0 and vx < Viewport.VIRTUAL_W and vy >= 0 and vy < Viewport.VIRTUAL_H

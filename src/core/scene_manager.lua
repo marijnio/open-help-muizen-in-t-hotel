@@ -6,7 +6,13 @@ local SceneManager = {
 }
 
 function SceneManager.switch(scene, params)
-    SceneManager.overlay = nil
+    if SceneManager.overlay then
+        local oldOverlay = SceneManager.overlay
+        SceneManager.overlay = nil
+        if oldOverlay.exit then
+            oldOverlay:exit()
+        end
+    end
     if SceneManager.current and SceneManager.current.exit then
         SceneManager.current:exit()
     end
@@ -31,6 +37,11 @@ function SceneManager.clearOverlay()
         SceneManager.overlay:exit()
     end
     SceneManager.overlay = nil
+    if App and not App.isTouchMode and App.lastVx and App.lastVy
+        and SceneManager.current and SceneManager.current.mousemoved
+    then
+        SceneManager.current:mousemoved(App.lastVx, App.lastVy)
+    end
 end
 
 function SceneManager.update(dt)

@@ -46,7 +46,8 @@ function Credits:update(dt)
     end
 end
 
-function Credits:mousepressed()
+function Credits:mousepressed(_vx, _vy, button)
+    if button ~= 1 then return end
     SceneManager.switch(App.states.launcher)
 end
 

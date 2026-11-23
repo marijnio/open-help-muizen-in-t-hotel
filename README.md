@@ -6,7 +6,7 @@ An independent, clean-room, open-source reimplementation of the classic 1996 Dut
 
 ## Legal & Copyright Disclaimer
 
-* **No copyrighted assets are included in this repository.** Original `.DXR`, `.EXE`, `.MOV`, `.AIF`, `.WAV`, and `.BMP` files, as well as converted images, audio, video frames, `.love` archives, and `.apk` builds, are excluded via [.gitignore](file:///Users/273974/Developer/help-muizen-hotel/.gitignore).
+* **No copyrighted assets are included in this repository.** Original `.DXR`, `.EXE`, `.MOV`, `.AIF`, `.WAV`, and `.BMP` files, as well as converted images, audio, video frames, `.love` archives, and `.apk` builds, are excluded via [.gitignore](.gitignore).
 * **You must supply your own legal copy** of the original game and run the local conversion script to generate `assets/` on your machine.
 * All code in `src/` and `tools/` is an independent clean-room implementation.
 
@@ -15,13 +15,13 @@ An independent, clean-room, open-source reimplementation of the classic 1996 Dut
 ## Design Philosophy
 
 * **Faithful yet modern:** Preserves the original `640×480` artwork, Director palettes/transparency, animations, QuickTime intro/room clips, sound effects, and gameplay flow while replacing 1990s Win16/QuickTime 2.0 limitations with crisp aspect-preserving scaling, safe-area support, reliable audio queuing, and unified mouse + touch controls.
-* **Pure-Python asset extraction:** [tools/director.py](file:///Users/273974/Developer/help-muizen-hotel/tools/director.py) decodes Macromedia Director 4 (`RIFX`/`XFIR` `MV93`) bitmaps, palettes, Macintosh `snd ` resources, score timelines, and projector movies directly, while [tools/convert_assets.py](file:///Users/273974/Developer/help-muizen-hotel/tools/convert_assets.py) transcodes audio and `.MOV` cutscenes with `ffmpeg`.
+* **Pure-Python asset extraction:** [tools/director.py](tools/director.py) decodes Macromedia Director 4 (`RIFX`/`XFIR` `MV93`) bitmaps, palettes, Macintosh `snd ` resources, score timelines, and projector movies directly, while [tools/convert_assets.py](tools/convert_assets.py) transcodes audio and `.MOV` cutscenes with `ffmpeg`.
 
 ---
 
 ## Prerequisites
 
-* **LÖVE 12.0** (also tested on LÖVE 11.5 via `love.getVersion()` guard in [conf.lua](file:///Users/273974/Developer/help-muizen-hotel/conf.lua))
+* **LÖVE 12.0** (also tested on LÖVE 11.5 via `love.getVersion()` guard in [conf.lua](conf.lua))
 * **Python 3** with **Pillow** (`pip install pillow`)
 * **`ffmpeg` and `ffprobe`** on `PATH` (for converting `.AIF`/`.WAV` audio and `.MOV` Apple Graphics `smc` video)
 
@@ -60,14 +60,14 @@ python3 tools/convert_assets.py --source backup/extracted --output assets
 
 ### Asset Search Order
 
-At startup, [src/core/assets.lua](file:///Users/273974/Developer/help-muizen-hotel/src/core/assets.lua) looks for `manifest.lua` in this order:
+At startup, [src/core/assets.lua](src/core/assets.lua) looks for `manifest.lua` in this order:
 
 1. Environment variable `MUIZEN_ASSETS_DIR`
-2. Gitignored `local_config.lua` (`assets_dir = "..."`; see [local_config.example.lua](file:///Users/273974/Developer/help-muizen-hotel/local_config.example.lua))
+2. Gitignored `local_config.lua` (`assets_dir = "..."`; see [local_config.example.lua](local_config.example.lua))
 3. Project/bundled `assets/` via `love.filesystem`
 4. LÖVE user save directory (`<save-dir>/assets/`), useful for side-loading on Android
 
-If no assets are found, the game launches [src/states/missing_assets.lua](file:///Users/273974/Developer/help-muizen-hotel/src/states/missing_assets.lua) with instructions, checked paths, and Retry (`R`) / Quit (`Esc`) actions.
+If no assets are found, the game launches [src/states/missing_assets.lua](src/states/missing_assets.lua) with instructions, checked paths, and Retry (`R`) / Quit (`Esc`) actions.
 
 ---
 
@@ -79,16 +79,21 @@ Launch from the repository root:
 love .
 ```
 
-### Global Controls
+### Global & Touch Controls
 
 | Input | Action |
 | :--- | :--- |
-| **Mouse / Touch** | Point, hover (desktop), tap/click hotzones |
-| **`F1`** | Toggle hotzone & virtual-coordinate debug overlay |
+| **Mouse (Desktop)** | Hover rooms on the Hotel Hub with the Mouse-Detector TV scanner; click hotzones, traps, and running mice |
+| **Touch (Tablet)** | Tap a room once to scan it (`Tik nogmaals`), tap again to enter; single-tap room spots, traps, and mice; letterbox/bezel taps and secondary multi-touch fingers are ignored |
+| **`F1`** | Toggle hotzone & virtual-coordinate debug overlay (in rooms/attic: `C` auto-catches the mouse, click/`Esc` skips caught animations/videos) |
 | **`F2`** | Toggle `linear` / `nearest` canvas scaling filter |
 | **`F11`** | Toggle fullscreen |
-| **`Esc`** | Context-aware back / save-and-quit dialog |
+| **`Esc` / Android Back** | Context-aware back / close trap or hint / save-and-quit dialog |
 | **`R`** | Retry asset loading (on Missing Assets screen) |
+
+### Save & Resume
+
+Progress is stored in `savegame.lua` inside LÖVE's save directory via automatic checkpoints (after catching a mouse, matching an instrument, or placing a mousetrap), on window focus loss/quit, and via the **Opslaan** button when exiting the Hotel Hub. Completed sessions clean up `savegame.lua` upon reaching the finale.
 
 ---
 
@@ -98,13 +103,19 @@ love .
   * Asset converter (`tools/director.py`, `tools/convert_assets.py`)
   * Core engine (`viewport`, `assets`, `audio_queue`, `cursor`, `hotzone`, `scene_manager`, `video_player`, `director_stage`, `confirm_dialog`, `save`)
   * Missing-assets screen, CD-ROM Launcher, Intro video (`engintro`), Options/Start Menu (`GGMDMENU`), and Hotel Hub with live Mouse-Detector TV scanner + Fat Lazy Cat hint video (`cathelp6`)
-* **Milestone 2 (Next):** All 20 interactive hotel rooms (`ATTIC.DXR` + 19 standard rooms), hiding-spot animations, catching running mice, mousetrap bag (`10`/`5`/`0` traps), and room hints
-* **Milestone 3:** Backstage instrument matching (`INSTRUM.DXR`), cumulative orchestra rehearsal (`ORCH.DXR`), finale (`THEEND.DXR` / `ENDSEQ.MOV`), and credits (`EXIT.DXR` / `CREDITS.DXR`)
-* **Milestone 4:** Save/resume polish & edge-case tuning for touch/desktop
-* **Milestone 5:** Bonus modes (**Het Muizendoolhof** & **Super Spel**) and Android packaging (`scripts/build_android.sh` with `love-android`, launcher icons, and `sensorLandscape` orientation lock)
+* **Milestone 2 (Implemented):**
+  * All 20 interactive hotel rooms (`ATTIC.DXR` + 19 standard rooms) with Director FilmLoop rendering and active room queue
+  * Hiding-spot animations, running-mouse catch mechanics with anti-double-tap catch lockout and custom hanging/move catch animation, mousetrap bag (`10`/`5`/`0` traps), and Fat Lazy Cat room hints
+* **Milestone 3 (Implemented):**
+  * Backstage instrument matching (`INSTRUM.DXR`) with intro voiceover lock and reject cooldown
+  * Cumulative orchestra rehearsal (`ORCH.DXR` with randomized music build progression and skip lock), grand finale (`ENDSEQ.MOV`), and credits (`CREDITS.DXR`)
+* **Milestone 4 (Implemented):**
+  * Save/resume hardening: versioned deterministic serialization, session normalization, automatic progress checkpoints + quit/focus autosave, mid-instrument resume, cleanup after finale, and resume summary display
+  * Touch/desktop edge-case tuning: focus-aware pause and ref-counted audio/video resume, multi-touch and bezel-margin guards, Android Back button support, touch scanner UX, trap-menu dismissal, and right-click skip guards
+* **Milestone 5 (Next):** Bonus modes (**Het Muizendoolhof** & **Super Spel**) and Android packaging (`scripts/build_android.sh` with `love-android`, launcher icons, and `sensorLandscape` orientation lock)
 
 ---
 
 ## Android Tablet Packaging (Planned in Milestone 5)
 
-The engine is already configured in [conf.lua](file:///Users/273974/Developer/help-muizen-hotel/conf.lua) and [main.lua](file:///Users/273974/Developer/help-muizen-hotel/main.lua) for Android tablets (`t.externalstorage = true`, `t.modules.touch = true`, fullscreen mobile launch, `love.window.getSafeArea()`, and touch-mode hover suppression). Packaging helpers (`scripts/build_android.sh` supporting bundled `.love` or `--no-assets` side-loading to `<save-dir>/assets/` and `--build-apk` via `love-android`) will be added in Milestone 5.
+The engine is already configured in [conf.lua](conf.lua) and [main.lua](main.lua) for Android tablets (`t.externalstorage = true`, `t.modules.touch = true`, fullscreen mobile launch, `love.window.getSafeArea()`, Android Back key handling, and touch-mode hover suppression). Packaging helpers (`scripts/build_android.sh` supporting bundled `.love` or `--no-assets` side-loading to `<save-dir>/assets/` and `--build-apk` via `love-android`) will be added in Milestone 5.

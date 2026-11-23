@@ -4,11 +4,16 @@ local Viewport = require("src.core.viewport")
 local Assets = require("src.core.assets")
 local AudioQueue = require("src.core.audio_queue")
 local Cursor = require("src.core.cursor")
+local Save = require("src.core.save")
 local SceneManager = require("src.core.scene_manager")
+local Rooms = require("src.data.rooms")
 
 App = {
     debugMode = false,
     isTouchMode = false,
+    inActiveSession = false,
+    focused = true,
+    activeTouchId = nil,
     lastVx = 320,
     lastVy = 240,
     session = {
@@ -23,10 +28,26 @@ App = {
         seenIntros = {},
         foundInstruments = {},
         lastInstrument = nil,
+        pendingInstrumentRoom = nil,
         buildIndex = 1,
     },
     states = {},
 }
+
+local function clampVirtual(vx, vy)
+    return math.max(0, math.min(Viewport.VIRTUAL_W, vx)), math.max(0, math.min(Viewport.VIRTUAL_H, vy))
+end
+
+function App.saveProgress()
+    if not App.inActiveSession or not App.session then
+        return false
+    end
+    local caught = App.session.caughtCount or 0
+    if caught >= Rooms.TOTAL_MICE and not App.session.pendingInstrumentRoom then
+        return false
+    end
+    return Save.write(App.session)
+end
 
 function App.reloadAssets()
     return Assets.init()
@@ -69,10 +90,16 @@ function love.resize()
 end
 
 function love.focus(focused)
-    if focused then
-        AudioQueue.resumeAll()
-    else
+    if focused == App.focused then
+        return
+    end
+    App.focused = focused
+    if not focused then
+        App.activeTouchId = nil
+        App.saveProgress()
         AudioQueue.pauseAll()
+    else
+        AudioQueue.resumeAll()
     end
     if SceneManager.current and SceneManager.current.onFocus then
         SceneManager.current:onFocus(focused)
@@ -82,7 +109,14 @@ function love.focus(focused)
     end
 end
 
+function love.quit()
+    App.saveProgress()
+end
+
 function love.update(dt)
+    if not App.focused then
+        return
+    end
     dt = math.min(dt, 0.1)
     AudioQueue.update(dt)
     SceneManager.update(dt)
@@ -97,7 +131,7 @@ end
 function love.mousemoved(sx, sy, _dx, _dy, istouch)
     if istouch then return end
     App.isTouchMode = false
-    local vx, vy = Viewport.screenToVirtual(sx, sy)
+    local vx, vy = clampVirtual(Viewport.screenToVirtual(sx, sy))
     App.lastVx, App.lastVy = vx, vy
     SceneManager.mousemoved(vx, vy)
 end
@@ -105,7 +139,8 @@ end
 function love.mousepressed(sx, sy, button, istouch)
     if istouch then return end
     App.isTouchMode = false
-    local vx, vy = Viewport.screenToVirtual(sx, sy)
+    local vx, vy, inside = Viewport.screenToVirtual(sx, sy)
+    if not inside then return end
     App.lastVx, App.lastVy = vx, vy
     SceneManager.mousepressed(vx, vy, button)
 end
@@ -113,34 +148,43 @@ end
 function love.mousereleased(sx, sy, button, istouch)
     if istouch then return end
     App.isTouchMode = false
-    local vx, vy = Viewport.screenToVirtual(sx, sy)
+    local vx, vy = clampVirtual(Viewport.screenToVirtual(sx, sy))
     App.lastVx, App.lastVy = vx, vy
     SceneManager.mousereleased(vx, vy, button)
 end
 
-function love.touchpressed(_id, sx, sy)
+function love.touchpressed(id, sx, sy)
     App.isTouchMode = true
-    local vx, vy = Viewport.screenToVirtual(sx, sy)
+    if App.activeTouchId ~= nil then return end
+    local vx, vy, inside = Viewport.screenToVirtual(sx, sy)
+    if not inside then return end
+    App.activeTouchId = id
     App.lastVx, App.lastVy = vx, vy
     SceneManager.mousemoved(vx, vy)
     SceneManager.mousepressed(vx, vy, 1)
 end
 
-function love.touchmoved(_id, sx, sy)
+function love.touchmoved(id, sx, sy)
+    if App.activeTouchId ~= id then return end
     App.isTouchMode = true
-    local vx, vy = Viewport.screenToVirtual(sx, sy)
+    local vx, vy = clampVirtual(Viewport.screenToVirtual(sx, sy))
     App.lastVx, App.lastVy = vx, vy
     SceneManager.mousemoved(vx, vy)
 end
 
-function love.touchreleased(_id, sx, sy)
+function love.touchreleased(id, sx, sy)
+    if App.activeTouchId ~= id then return end
+    App.activeTouchId = nil
     App.isTouchMode = true
-    local vx, vy = Viewport.screenToVirtual(sx, sy)
+    local vx, vy = clampVirtual(Viewport.screenToVirtual(sx, sy))
     App.lastVx, App.lastVy = vx, vy
     SceneManager.mousereleased(vx, vy, 1)
 end
 
 function love.keypressed(key)
+    if key == "acback" then
+        key = "escape"
+    end
     if key == "f1" then
         App.debugMode = not App.debugMode
         return

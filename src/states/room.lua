@@ -111,6 +111,9 @@ end
 function Room:finishEntering()
     self.wipeProgress = 1
     self.mode = "idle"
+    if not App.isTouchMode and App.lastVx and App.lastVy then
+        self:mousemoved(App.lastVx, App.lastVy)
+    end
 end
 
 function Room:exit()
@@ -311,6 +314,10 @@ function Room:catchMouse(catchX, catchY)
     self.mouseSpot = nil
     self.mouseCatchLockTimer = 0
     Rooms.markRoomCaught(App.session, self.room.id)
+    App.session.pendingInstrumentRoom = self.room.title
+    if App.saveProgress then
+        App.saveProgress()
+    end
 
     self.traps.active = nil
     self.traps.menuOpen = false
@@ -533,6 +540,10 @@ function Room:mousepressed(vx, vy, button)
                 Traps.place(self.traps, slot.trapType)
                 return
             end
+        end
+        if not pointInRect(vx, vy, Traps.BAG_RECT) then
+            self.traps.menuOpen = false
+            return
         end
     end
 

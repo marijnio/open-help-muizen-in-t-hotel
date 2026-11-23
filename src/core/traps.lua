@@ -67,13 +67,23 @@ function HintOverlay:exit()
     end
 end
 
+function HintOverlay:onFocus(focused)
+    if not self.player then return end
+    if focused then
+        self.player:resume()
+    else
+        self.player:pause()
+    end
+end
+
 function HintOverlay:update(dt)
     if self.player then
         self.player:update(dt)
     end
 end
 
-function HintOverlay:mousepressed()
+function HintOverlay:mousepressed(_vx, _vy, button)
+    if button ~= 1 then return end
     self:close()
 end
 
@@ -118,6 +128,9 @@ function Traps.place(state, trapType)
         return false
     end
     App.session.trapsLeft = App.session.trapsLeft - 1
+    if App.saveProgress then
+        App.saveProgress()
+    end
     state.menuOpen = false
     state.active = {
         trapType = trapType,

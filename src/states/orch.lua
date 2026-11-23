@@ -98,7 +98,8 @@ function Orch:mousemoved()
     Cursor.setSystem(self:canSkip() and "hand" or "arrow")
 end
 
-function Orch:mousepressed()
+function Orch:mousepressed(_vx, _vy, button)
+    if button ~= 1 then return end
     if self:canSkip() then
         self:proceed()
     end

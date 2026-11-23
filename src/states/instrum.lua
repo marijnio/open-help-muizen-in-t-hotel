@@ -12,6 +12,7 @@ local Rooms = require("src.data.rooms")
 local Instrum = {}
 
 local REJECT_COOLDOWN = 1.0
+local MOUSE_CHANNEL = 19
 
 local function pickTargetInstrument()
     App.session.foundInstruments = App.session.foundInstruments or {}
@@ -200,6 +201,10 @@ function Instrum:completeMatching()
     App.session.foundInstruments = App.session.foundInstruments or {}
     App.session.foundInstruments[self.target.id] = true
     App.session.lastInstrument = self.target.id
+    App.session.pendingInstrumentRoom = nil
+    if App.saveProgress then
+        App.saveProgress()
+    end
     SceneManager.switch(
         App.states.orch, {
             roomTitle = self.roomTitle,
@@ -315,7 +320,8 @@ function Instrum:draw(vx, vy)
         frameNum = math.max(self.animSpan.startFrame, math.min(self.animSpan.endFrame, math.floor(self.animFrameFloat)))
     end
 
-    DirectorStage.drawFrame("instrum", frameNum)
+    local drawOpts = self.introVoPending and { hiddenChannels = { [MOUSE_CHANNEL] = true } } or nil
+    DirectorStage.drawFrame("instrum", frameNum, drawOpts)
 
     -- Status pill inside the bottom bar
     love.graphics.setColor(0.10, 0.12, 0.16, 0.88)
@@ -324,6 +330,8 @@ function Instrum:draw(vx, vy)
     local msg
     if self.mode == "accept_intro" or self.mode == "accept_loop" then
         msg = string.format("Gevonden: %s!", self.target.name)
+    elseif self.introVoPending then
+        msg = "Luister goed..."
     elseif self.hoveredFamily then
         msg = string.format("Welk instrument hoort bij deze muis? • %s", self.hoveredFamily.label)
     else
