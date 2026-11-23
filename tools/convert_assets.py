@@ -402,7 +402,6 @@ def main() -> int:
 
         for rel, key, shared in (
             ("muizen.exe", "muizen_exe", root_shared),
-            ("galerij.exe", "galerij", None),
             ("doolhof/doolhof.exe", "doolhof", None),
         ):
             if rel in files:

@@ -53,7 +53,6 @@ function love.load()
         orch = require("src.states.orch"),
         finale = require("src.states.finale"),
         credits = require("src.states.credits"),
-        gallery = require("src.states.gallery"),
     }
 
     if App.reloadAssets() then

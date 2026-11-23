@@ -97,7 +97,7 @@ love .
 * **Milestone 1 (Implemented):**
   * Asset converter (`tools/director.py`, `tools/convert_assets.py`)
   * Core engine (`viewport`, `assets`, `audio_queue`, `cursor`, `hotzone`, `scene_manager`, `video_player`, `director_stage`, `confirm_dialog`, `save`)
-  * Missing-assets screen, CD-ROM Launcher, Intro video (`engintro`), Options/Start Menu (`GGMDMENU`), Hotel Hub with live Mouse-Detector TV scanner + Fat Lazy Cat hint video (`cathelp6`), and playable **De Galerij** (`GALERIJ.EXE`)
+  * Missing-assets screen, CD-ROM Launcher, Intro video (`engintro`), Options/Start Menu (`GGMDMENU`), and Hotel Hub with live Mouse-Detector TV scanner + Fat Lazy Cat hint video (`cathelp6`)
 * **Milestone 2 (Next):** All 20 interactive hotel rooms (`ATTIC.DXR` + 19 standard rooms), hiding-spot animations, catching running mice, mousetrap bag (`10`/`5`/`0` traps), and room hints
 * **Milestone 3:** Backstage instrument matching (`INSTRUM.DXR`), cumulative orchestra rehearsal (`ORCH.DXR`), finale (`THEEND.DXR` / `ENDSEQ.MOV`), and credits (`EXIT.DXR` / `CREDITS.DXR`)
 * **Milestone 4:** Save/resume polish & edge-case tuning for touch/desktop
