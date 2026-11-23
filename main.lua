@@ -76,6 +76,9 @@ function love.load()
         orch = require("src.states.orch"),
         finale = require("src.states.finale"),
         credits = require("src.states.credits"),
+        doolhof = require("src.states.doolhof"),
+        super_hub = require("src.states.super_hub"),
+        super_room = require("src.states.super_room"),
     }
 
     if App.reloadAssets() then

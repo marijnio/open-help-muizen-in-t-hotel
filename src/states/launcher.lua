@@ -12,8 +12,8 @@ local Launcher = {}
 local MENU_ITEMS = {
     { id = "main_game", label = "Help! Muizen in 't Hotel!", sub = "Hoofdspel" },
     { id = "intro",     label = "Introductiefilm bekijken",  sub = "Verhaal (QuickTime)" },
-    { id = "doolhof",   label = "Het Muizendoolhof",         sub = "Bonusspel (Milestone 5)" },
-    { id = "superspel", label = "Super Spel",                sub = "Bonusspel (Milestone 5)" },
+    { id = "doolhof",   label = "Het Muizendoolhof",         sub = "Bonusspel • Doolhof" },
+    { id = "superspel", label = "Super Spel",                sub = "Bonusspel • Arcade" },
     { id = "quit",      label = "Afsluiten",                 sub = "Esc" },
 }
 
@@ -65,9 +65,10 @@ function Launcher:activate(id)
         SceneManager.switch(App.states.start_menu)
     elseif id == "intro" then
         SceneManager.switch(App.states.intro)
-    elseif id == "doolhof" or id == "superspel" then
-        self.notice = "Dit bonusspel wordt in Milestone 5 toegevoegd!"
-        self.noticeTimer = 2.8
+    elseif id == "doolhof" then
+        SceneManager.switch(App.states.doolhof)
+    elseif id == "superspel" then
+        SceneManager.switch(App.states.super_hub, { newGame = true })
     elseif id == "quit" then
         self:promptQuit()
     end
@@ -141,11 +142,8 @@ function Launcher:draw(vx, vy)
 
     for _, item in ipairs(MENU_ITEMS) do
         local isHot = (self.hotzones.hoveredId == item.id)
-        local isDisabled = (item.id == "doolhof" or item.id == "superspel")
         if isHot then
             love.graphics.setColor(0.22, 0.48, 0.25, 0.95)
-        elseif isDisabled then
-            love.graphics.setColor(0.14, 0.16, 0.20, 0.85)
         else
             love.graphics.setColor(0.15, 0.22, 0.26, 0.92)
         end
@@ -153,7 +151,7 @@ function Launcher:draw(vx, vy)
         love.graphics.setColor(isHot and 0.65 or 0.42, isHot and 0.98 or 0.68, isHot and 0.55 or 0.48, 1)
         love.graphics.rectangle("line", item._x, item._y, item._w, item._h, 8, 8)
 
-        love.graphics.setColor(isDisabled and 0.72 or 1, isDisabled and 0.75 or 1, isDisabled and 0.78 or 1, 1)
+        love.graphics.setColor(1, 1, 1, 1)
         love.graphics.printf(item.label, item._x + 12, item._y + 8, item._w - 24, "center")
         love.graphics.setColor(0.72, 0.82, 0.78, 1)
         love.graphics.printf(item.sub, item._x + 12, item._y + 26, item._w - 24, "center")

@@ -112,10 +112,33 @@ Progress is stored in `savegame.lua` inside LÖVE's save directory via automatic
 * **Milestone 4 (Implemented):**
   * Save/resume hardening: versioned deterministic serialization, session normalization, automatic progress checkpoints + quit/focus autosave, mid-instrument resume, cleanup after finale, and resume summary display
   * Touch/desktop edge-case tuning: focus-aware pause and ref-counted audio/video resume, multi-touch and bezel-margin guards, Android Back button support, touch scanner UX, trap-menu dismissal, and right-click skip guards
-* **Milestone 5 (Next):** Bonus modes (**Het Muizendoolhof** & **Super Spel**) and Android packaging (`scripts/build_android.sh` with `love-android`, launcher icons, and `sensorLandscape` orientation lock)
+* **Milestone 5 (Implemented):**
+  * **Het Muizendoolhof** (`src/states/doolhof.lua`): randomized 4-quadrant 25×25 maze (`DOOLHOF.EXE` assets) with BFS connectivity guarantee, 10 mice, 3 corner cheeses, porters/cats/guest enemies, commotion animations, keyboard/D-pad/swipe controls, and game-over summary
+  * **Super Spel** (`src/states/super_hub.lua`, `src/states/super_room.lua`, `src/core/super_scores.lua`): fast arcade hotel mode across all 19 `SUPER/*.DXR` rooms with auto-animating hiding spots, premature-click penalties, shader-tinted blue decoy mice, room-to-room escape chases, and persistent Top 5 High Scores (`superscores.lua`)
+  * **Android Packaging** (`scripts/build_android.sh`, `scripts/generate_android_icons.py`): `.love` / `--no-assets` bundler, `adb` side-loading helper, mipmap launcher icon generator, and `love-android` APK builder with `sensorLandscape` orientation lock
 
 ---
 
-## Android Tablet Packaging (Planned in Milestone 5)
+## Bonus Modes
 
-The engine is already configured in [conf.lua](conf.lua) and [main.lua](main.lua) for Android tablets (`t.externalstorage = true`, `t.modules.touch = true`, fullscreen mobile launch, `love.window.getSafeArea()`, Android Back key handling, and touch-mode hover suppression). Packaging helpers (`scripts/build_android.sh` supporting bundled `.love` or `--no-assets` side-loading to `<save-dir>/assets/` and `--build-apk` via `love-android`) will be added in Milestone 5.
+* **Het Muizendoolhof:** Guide 10 green mice from the hole at top-left to any of the 3 corner cheeses and safely back while dodging porters, cats, and an angry guest. Steer with **Arrow keys / WASD**, the on-screen **D-pad**, or **touch/mouse swipes** (`P` pauses, `Esc` quits).
+* **Super Spel:** Scan the hotel cross-section with the Mouse-Detector TV to find the active room. Inside, hiding places animate automatically—**do not click until a mouse runs out!** Catch green mice for `300 / 200 / 100 / 50` points (decreasing if the mouse escapes to neighboring rooms), ignore blue decoy mice (`-100`), and aim for the Top 5 High Scores board.
+
+---
+
+## Android Tablet Packaging
+
+The engine is configured in [conf.lua](conf.lua) and [main.lua](main.lua) for Android tablets (`t.externalstorage = true`, `t.modules.touch = true`, fullscreen mobile launch, `love.window.getSafeArea()`, Android Back key handling, and touch-mode hover suppression).
+
+Package with [scripts/build_android.sh](scripts/build_android.sh):
+
+```bash
+# 1. Build a self-contained .love archive (includes local assets/)
+./scripts/build_android.sh
+
+# 2. Or build a lightweight .love without copyrighted assets and push assets/ via adb
+./scripts/build_android.sh --no-assets --push-assets
+
+# 3. Build an APK using a local love-android checkout (sets sensorLandscape + launcher icons)
+LOVE_ANDROID_DIR=/path/to/love-android ./scripts/build_android.sh --build-apk
+```

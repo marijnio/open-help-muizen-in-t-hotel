@@ -4,6 +4,28 @@ local Assets = require("src.core.assets")
 
 local DirectorStage = {}
 
+local blueMouseShader = nil
+local blueMouseShaderChecked = false
+
+local function getBlueMouseShader()
+    if blueMouseShaderChecked then
+        return blueMouseShader
+    end
+    blueMouseShaderChecked = true
+    if love and love.graphics and love.graphics.newShader then
+        local ok, shader = pcall(love.graphics.newShader, [[
+vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
+    vec4 c = Texel(tex, tc) * color;
+    return vec4(c.r, c.g * 0.42 + c.b * 0.58, c.g * 0.96 + c.b * 0.04, c.a);
+}
+]])
+        if ok then
+            blueMouseShader = shader
+        end
+    end
+    return blueMouseShader
+end
+
 local function resolveCast(movieKey, castId, sharedKey)
     local score = Assets.getDxr(movieKey)
     if not score then return nil end
@@ -94,13 +116,21 @@ function DirectorStage.drawFrame(movieKey, frameNum, opts)
     end
 
     love.graphics.setColor(1, 1, 1, 1)
+    local blueShader = opts.blueMouse and getBlueMouseShader() or nil
     for ch = 1, 48 do
         local sp = byChannel[ch]
         if sp and not hiddenChannels[ch] then
             local castId = channelCastOverrides[ch] or sp.cast
             local cast = resolveCast(movieKey, castId, sharedKey)
             if cast then
+                local useBlue = blueShader and castId >= 400 and castId <= 753
+                if useBlue then
+                    love.graphics.setShader(blueShader)
+                end
                 drawCastSprite(movieKey, sp, cast, drawOpts)
+                if useBlue then
+                    love.graphics.setShader()
+                end
             end
         end
     end
