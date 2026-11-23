@@ -48,6 +48,18 @@ local function drawCastSprite(movieKey, sp, cast, opts)
     end
 end
 
+function DirectorStage.getChannelSprite(movieKey, frameNum, ch)
+    local score = Assets.getDxr(movieKey)
+    local frame = score and score.frames and score.frames[frameNum]
+    if not frame then return nil end
+    for _, sp in ipairs(frame) do
+        if sp.ch == ch then
+            return sp
+        end
+    end
+    return nil
+end
+
 function DirectorStage.drawFrame(movieKey, frameNum, opts)
     opts = opts or {}
     local score = Assets.getDxr(movieKey)
@@ -62,19 +74,33 @@ function DirectorStage.drawFrame(movieKey, frameNum, opts)
     local sharedKey = (opts.sharedKey == nil) and "shared" or opts.sharedKey
     local channelCastOverrides = opts.channelCasts or {}
     local hiddenChannels = opts.hiddenChannels or {}
+    local puppetSprites = opts.puppetSprites
     opts._resolvedShared = sharedKey
 
-    love.graphics.setColor(1, 1, 1, 1)
+    local drawOpts = {
+        filter = opts.filter,
+        loopTick = opts.loopTick,
+        sharedKey = sharedKey,
+    }
+
+    local byChannel = {}
     for _, sp in ipairs(frame) do
-        if not hiddenChannels[sp.ch] then
-            local castId = channelCastOverrides[sp.ch] or sp.cast
+        byChannel[sp.ch] = sp
+    end
+    if puppetSprites then
+        for ch, psp in pairs(puppetSprites) do
+            byChannel[ch] = psp
+        end
+    end
+
+    love.graphics.setColor(1, 1, 1, 1)
+    for ch = 1, 48 do
+        local sp = byChannel[ch]
+        if sp and not hiddenChannels[ch] then
+            local castId = channelCastOverrides[ch] or sp.cast
             local cast = resolveCast(movieKey, castId, sharedKey)
             if cast then
-                drawCastSprite(movieKey, sp, cast, {
-                    filter = opts.filter,
-                    loopTick = opts.loopTick,
-                    sharedKey = sharedKey,
-                })
+                drawCastSprite(movieKey, sp, cast, drawOpts)
             end
         end
     end

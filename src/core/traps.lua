@@ -14,7 +14,7 @@ Traps.SEQUENCES = {
     [2] = { 777, 778, 779, 780, 781, 782, 783, 784, 785, 786, 787, 788 },
     [3] = { 789, 790, 791, 792, 793, 794, 795 },
     [4] = { 809, 810, 811, 812, 813, 814 },
-    [5] = { 796, 797, 798, 799, 800, 801, 802, 803, 804 },
+    [5] = { 796, 797, 798, 799, 800, 801, 802, 803, 804 }
 }
 
 -- Toolbar channel positions for the 5 selectable trap icons (matching ch 41..45)
@@ -23,7 +23,7 @@ Traps.MENU_SLOTS = {
     { trapType = 2, cast = 773, x = 492, y = 414, w = 35, h = 36 },
     { trapType = 3, cast = 774, x = 458, y = 414, w = 35, h = 36 },
     { trapType = 4, cast = 775, x = 424, y = 414, w = 35, h = 36 },
-    { trapType = 5, cast = 776, x = 390, y = 414, w = 35, h = 36 },
+    { trapType = 5, cast = 776, x = 390, y = 414, w = 35, h = 36 }
 }
 
 Traps.BAG_RECT = { x = 518, y = 444, w = 50, h = 35 }
@@ -37,11 +37,13 @@ function HintOverlay:enter(params)
     Cursor.reset()
     self.videoKey = params.videoKey or "cathelp7"
     self.onClose = params.onClose
-    self.player = VideoPlayer.new(self.videoKey, {
-        onFinish = function()
-            self:close()
-        end,
-    })
+    self.player = VideoPlayer.new(
+        self.videoKey, {
+            onFinish = function()
+                self:close()
+            end
+        }
+    )
     if not self.player then
         self:close()
     end
@@ -95,17 +97,19 @@ function HintOverlay:draw()
 end
 
 function Traps.openCatHint(videoKey, onClose)
-    SceneManager.setOverlay(HintOverlay, {
-        videoKey = videoKey,
-        onClose = onClose,
-    })
+    SceneManager.setOverlay(
+        HintOverlay, {
+            videoKey = videoKey,
+            onClose = onClose
+        }
+    )
 end
 
 function Traps.newState(trapPos)
     return {
         menuOpen = false,
         active = nil, -- { trapType, x, y, frame, timer, sprung }
-        trapPos = trapPos or { x = 320, y = 370 },
+        trapPos = trapPos or { x = 320, y = 370 }
     }
 end
 
@@ -121,7 +125,7 @@ function Traps.place(state, trapType)
         y = state.trapPos.y,
         frame = 1,
         timer = 0,
-        sprung = false,
+        sprung = false
     }
     AudioQueue.playSfx("dxr/shared/sounds/s_822.wav", 0.55)
     return true
@@ -196,13 +200,18 @@ function Traps.drawToolbarHud(state, roomTitle, hasMouse)
     -- Subtle HUD pill inside the center of the bottom bar
     love.graphics.setColor(0.10, 0.12, 0.16, 0.88)
     love.graphics.rectangle("fill", 90, 449, 412, 24, 5, 5)
+    if hasMouse then
+        love.graphics.setColor(0.25, 0.95, 0.35, 1)
+    else
+        love.graphics.setColor(0.45, 0.48, 0.52, 0.8)
+    end
+    love.graphics.circle("fill", 104, 461, 4)
     love.graphics.setColor(0.95, 0.92, 0.68, 1)
-    local mouseTag = hasMouse and "Muis aanwezig!" or "Kamer leeg"
     love.graphics.printf(
-        string.format("%s  •  %s  •  Gevangen: %d/19  •  Vallen: %d", roomTitle, mouseTag, caught, trapsLeft),
-        94,
+        string.format("%s  •  %d/19  •  Vallen: %d", roomTitle, caught, trapsLeft),
+        114,
         454,
-        404,
+        382,
         "center"
     )
 end

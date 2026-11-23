@@ -108,7 +108,7 @@ function Room:buildHotzones()
                 if self.mode == "idle" then
                     self:triggerSpot(sp.spot)
                 end
-            end,
+            end
         })
     end
 
@@ -120,7 +120,7 @@ function Room:buildHotzones()
         h = Traps.EXIT_RECT.h,
         onClick = function()
             SceneManager.switch(App.states.hotel_hub)
-        end,
+        end
     })
 
     self.hotzones:add({
@@ -135,7 +135,7 @@ function Room:buildHotzones()
                 return
             end
             self.traps.menuOpen = not self.traps.menuOpen
-        end,
+        end
     })
 
     self.hotzones:add({
@@ -147,10 +147,12 @@ function Room:buildHotzones()
         onClick = function()
             AudioQueue.pauseAll()
             local idx = love.math.random(1, #HINT_VIDEOS)
-            Traps.openCatHint(HINT_VIDEOS[idx], function()
-                AudioQueue.resumeAll()
-            end)
-        end,
+            Traps.openCatHint(
+                HINT_VIDEOS[idx], function()
+                    AudioQueue.resumeAll()
+                end
+            )
+        end
     })
 end
 
@@ -220,8 +222,8 @@ end
 function Room:currentIdleFrame()
     local key = "loop" .. tostring(self.loopIdx)
     return (self.spans[key] and self.spans[key].startFrame)
-        or (self.spans["loop1"] and self.spans["loop1"].startFrame)
-        or 22
+            or (self.spans["loop1"] and self.spans["loop1"].startFrame)
+            or 22
 end
 
 function Room:currentFrameNumber()
@@ -237,11 +239,13 @@ function Room:startCaughtVideo()
     if self.room.mov then
         AudioQueue.stopAll()
         self.mode = "caught_video"
-        self.caughtPlayer = VideoPlayer.new(self.room.mov, {
-            onFinish = function()
-                self:finishRoomCapture()
-            end,
-        })
+        self.caughtPlayer = VideoPlayer.new(
+            self.room.mov, {
+                onFinish = function()
+                    self:finishRoomCapture()
+                end
+            }
+        )
         if self.caughtPlayer then
             return
         end
@@ -319,14 +323,15 @@ function Room:update(dt)
         self.loopTick = self.loopTick + 1
     end
 
-    if self.mode == "idle" then
-        if self.meta.numLoops > 1 then
-            self.loopTimer = self.loopTimer + dt
-            if self.loopTimer >= 3.5 then
-                self.loopTimer = 0
-                self.loopIdx = (self.loopIdx % self.meta.numLoops) + 1
-            end
+    if self.meta.numLoops > 1 and self.mode ~= "caught" then
+        self.loopTimer = self.loopTimer + dt
+        if self.loopTimer >= 3.5 then
+            self.loopTimer = 0
+            self.loopIdx = (self.loopIdx % self.meta.numLoops) + 1
         end
+    end
+
+    if self.mode == "idle" then
         return
     end
 
@@ -338,8 +343,8 @@ function Room:update(dt)
     local playFps = self.fps
     if self.mode == "mouse_run" then
         playFps = DIFFICULTY_FPS[App.session.difficulty or 1] or 12
-        local progress = (self.animFrameFloat - self.animSpan.startFrame) /
-            math.max(1, self.animSpan.endFrame - self.animSpan.startFrame)
+        local progress = (self.animFrameFloat - self.animSpan.startFrame)
+                / math.max(1, self.animSpan.endFrame - self.animSpan.startFrame)
         if self.traps.active then
             if not self.traps.active.sprung and progress >= 0.25 then
                 Traps.spring(self.traps)
@@ -405,7 +410,7 @@ function Room:mousepressed(vx, vy, button)
         if bounds then
             local pad = App.isTouchMode and 26 or 14
             if vx >= (bounds.x - pad) and vx <= (bounds.x + bounds.w + pad)
-               and vy >= (bounds.y - pad) and vy <= (bounds.y + bounds.h + pad) then
+                    and vy >= (bounds.y - pad) and vy <= (bounds.y + bounds.h + pad) then
                 self:catchMouse()
                 return
             end
@@ -479,11 +484,27 @@ function Room:draw(vx, vy)
         love.graphics.setScissor(0, 0, wipeW, 480)
     end
 
+    local puppetSprites = nil
+    if self.mode ~= "caught" and self.meta.loopChannel and self.meta.loopChannel > 0 then
+        local idleFrame = self:currentIdleFrame()
+        local loopSp = DirectorStage.getChannelSprite(self.dxrKey, idleFrame, self.meta.loopChannel)
+        if not loopSp then
+            local l1 = (self.spans["loop1"] and self.spans["loop1"].startFrame) or 22
+            loopSp = DirectorStage.getChannelSprite(self.dxrKey, l1, self.meta.loopChannel)
+        end
+        if loopSp then
+            puppetSprites = { [self.meta.loopChannel] = loopSp }
+        end
+    end
+
     -- Hide built-in trap popup channels 41..45 and show our clean interactive menu instead
-    DirectorStage.drawFrame(self.dxrKey, frameNum, {
-        loopTick = self.loopTick,
-        hiddenChannels = { [41] = true, [42] = true, [43] = true, [44] = true, [45] = true },
-    })
+    DirectorStage.drawFrame(
+        self.dxrKey, frameNum, {
+            loopTick = self.loopTick,
+            puppetSprites = puppetSprites,
+            hiddenChannels = { [41] = true, [42] = true, [43] = true, [44] = true, [45] = true }
+        }
+    )
 
     if self.mode == "entering" then
         love.graphics.setScissor()
