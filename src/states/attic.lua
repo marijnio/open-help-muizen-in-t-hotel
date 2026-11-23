@@ -294,6 +294,13 @@ end
 function Attic:mousepressed(vx, vy, button)
     if button ~= 1 then return end
 
+    if self.mode == "caught" then
+        if App.debugMode then
+            SceneManager.switch(App.states.instrum, { roomTitle = "Zolder" })
+        end
+        return
+    end
+
     if self.traps.menuOpen and (App.session.trapsLeft or 0) > 0 then
         for _, slot in ipairs(Traps.MENU_SLOTS) do
             if pointInRect(vx, vy, slot) then
@@ -329,6 +336,12 @@ end
 function Attic:keypressed(key)
     if App.debugMode and key == "c" and self.hasMouse and self.mode ~= "caught" then
         self:catchMouse()
+        return true
+    end
+    if self.mode == "caught" then
+        if App.debugMode and (key == "escape" or key == "space" or key == "return") then
+            SceneManager.switch(App.states.instrum, { roomTitle = "Zolder" })
+        end
         return true
     end
     if key == "escape" then

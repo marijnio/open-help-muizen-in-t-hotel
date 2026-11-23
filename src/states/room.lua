@@ -495,10 +495,15 @@ function Room:mousepressed(vx, vy, button)
         return
     end
     if self.mode == "caught" then
+        if App.debugMode then
+            self:startCaughtVideo()
+        end
         return
     end
     if self.mode == "caught_video" then
-        self:finishRoomCapture()
+        if App.debugMode then
+            self:finishRoomCapture()
+        end
         return
     end
 
@@ -572,14 +577,16 @@ function Room:keypressed(key)
         return false
     end
     if self.mode == "caught" then
+        if App.debugMode and (key == "escape" or key == "space" or key == "return") then
+            self:startCaughtVideo()
+        end
         return true
     end
     if self.mode == "caught_video" then
-        if key == "escape" or key == "space" or key == "return" then
+        if App.debugMode and (key == "escape" or key == "space" or key == "return") then
             self:finishRoomCapture()
-            return true
         end
-        return false
+        return true
     end
     if key == "escape" then
         if self.traps.menuOpen then
@@ -601,10 +608,12 @@ function Room:draw(vx, vy)
         if self.caughtPlayer then
             self.caughtPlayer:draw()
         end
-        love.graphics.setColor(0, 0, 0, 0.55)
-        love.graphics.rectangle("fill", 454, 450, 180, 24, 5, 5)
-        love.graphics.setColor(0.95, 0.95, 0.95, 0.9)
-        love.graphics.printf("Klik / Esc = Overslaan", 454, 455, 180, "center")
+        if App.debugMode then
+            love.graphics.setColor(0, 0, 0, 0.55)
+            love.graphics.rectangle("fill", 454, 450, 180, 24, 5, 5)
+            love.graphics.setColor(0.95, 0.95, 0.95, 0.9)
+            love.graphics.printf("Klik / Esc = Overslaan", 454, 455, 180, "center")
+        end
         love.graphics.pop()
         return
     end
