@@ -262,26 +262,7 @@ function Instrum:draw(vx, vy)
         frameNum = math.max(self.animSpan.startFrame, math.min(self.animSpan.endFrame, math.floor(self.animFrameFloat)))
     end
 
-    local channelCasts = nil
-    if (self.mode == "select" or self.mode == "bored") and self.hoveredFamily and self.hoveredFamily.hilite then
-        channelCasts = { [self.hoveredFamily.ch] = self.hoveredFamily.hilite }
-    end
-
-    DirectorStage.drawFrame("instrum", frameNum, {
-        channelCasts = channelCasts,
-    })
-
-    -- Highlight Piano subtly on hover (it has no separate hilite bitmap in INSTRUM.DXR)
-    if (self.mode == "select" or self.mode == "bored") and self.hoveredFamily and not self.hoveredFamily.hilite then
-        for _, z in ipairs(self.hotzones.zones) do
-            if z.family and z.family.family == self.hoveredFamily.family then
-                love.graphics.setColor(1, 0.85, 0.25, 0.75)
-                love.graphics.setLineWidth(2)
-                love.graphics.rectangle("line", z.x, z.y, z.w, z.h, 6, 6)
-                break
-            end
-        end
-    end
+    DirectorStage.drawFrame("instrum", frameNum)
 
     -- Status pill inside the bottom bar
     love.graphics.setColor(0.10, 0.12, 0.16, 0.88)
