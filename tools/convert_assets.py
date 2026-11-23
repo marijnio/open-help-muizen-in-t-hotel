@@ -8,6 +8,8 @@ and BMP images into LÖVE-ready assets + assets/manifest.lua.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import io
 import os
 import re
 import shutil
@@ -18,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from director import DirectorMovie, load_dxr, load_projector_movies
@@ -105,29 +107,72 @@ def probe_mov(src: Path) -> dict:
     return info
 
 
-def convert_video(src: Path, out_dir: Path, rel_dir: str, quality: int) -> dict:
+def _encode_png(img: Image.Image) -> bytes:
+    buf = io.BytesIO()
+    img.save(buf, "PNG", optimize=True)
+    return buf.getvalue()
+
+
+def convert_video(src: Path, out_dir: Path, rel_dir: str) -> dict:
+    """Extract frames as lossless palette PNG *delta patches* plus a frame step index.
+
+    The original QuickTime clips are 8-bit palettized (smc/pal8) cel animations: most
+    frames are held or only change a small region. So instead of storing every frame we
+    store, per change, only the bounding rectangle of changed pixels (first frame is a
+    full patch). Identical patches (loops) are stored once. The player composites patches
+    onto a canvas in order. This is lossless and many times smaller than JPEG sequences.
+    """
     out_dir.mkdir(parents=True, exist_ok=True)
     meta = probe_mov(src)
     fps = meta["fps"] or 12.0
 
+    for old in list(out_dir.glob("f_*.*")) + list(out_dir.glob("p_*.*")) + list(out_dir.glob("raw_*.*")):
+        old.unlink()
+
     cmd_frames = [
-        "ffmpeg",
-        "-y",
-        "-v",
-        "error",
-        "-i",
-        str(src),
-        "-vf",
-        f"fps={fps}",
-        "-q:v",
-        str(quality),
-        str(out_dir / "f_%04d.jpg"),
+        "ffmpeg", "-y", "-v", "error", "-i", str(src),
+        "-vf", f"fps={fps}", "-pix_fmt", "pal8", "-compression_level", "1",
+        str(out_dir / "raw_%05d.png"),
     ]
     res = subprocess.run(cmd_frames, capture_output=True, text=True)
     if res.returncode != 0:
         raise RuntimeError(f"ffmpeg video frames failed for {src}: {res.stderr}")
 
-    frame_count = len(list(out_dir.glob("f_*.jpg")))
+    patches: List[Tuple[int, int]] = []
+    patch_ids: Dict[Tuple[int, int, str], int] = {}
+    steps: List[int] = []
+    prev_rgb: Image.Image | None = None
+    for raw in sorted(out_dir.glob("raw_*.png")):
+        with Image.open(raw) as im:
+            im.load()
+        raw.unlink()
+        rgb = im.convert("RGB")
+        if prev_rgb is None:
+            bbox = (0, 0, im.width, im.height)
+        else:
+            bbox = ImageChops.difference(rgb, prev_rgb).getbbox()
+        prev_rgb = rgb
+        if not bbox:
+            steps.append(0)
+            continue
+        data = _encode_png(im.crop(bbox))
+        key = (bbox[0], bbox[1], hashlib.sha1(data).hexdigest())
+        pid = patch_ids.get(key)
+        if pid is None:
+            pid = len(patches) + 1
+            patch_ids[key] = pid
+            patches.append((bbox[0], bbox[1]))
+            (out_dir / f"p_{pid:04d}.png").write_bytes(data)
+        steps.append(pid)
+
+    frame_count = len(steps)
+    index_rel = f"{rel_dir}/frames.lua"
+    (out_dir / "frames.lua").write_text(
+        "return {\n  version = 2,\n"
+        + "  patches = {" + ",".join(f"{{{x},{y}}}" for x, y in patches) + "},\n"
+        + "  steps = {" + ",".join(str(s) for s in steps) + "},\n}\n",
+        encoding="utf-8",
+    )
     audio_rel = None
     if meta["has_audio"]:
         audio_path = out_dir / "audio.mp3"
@@ -152,13 +197,15 @@ def convert_video(src: Path, out_dir: Path, rel_dir: str, quality: int) -> dict:
 
     return {
         "dir": rel_dir,
-        "pattern": f"{rel_dir}/f_%04d.jpg",
+        "pattern": f"{rel_dir}/p_%04d.png",
         "audio": audio_rel,
         "fps": fps,
         "frames": frame_count,
         "width": meta["width"],
         "height": meta["height"],
         "duration": meta["duration"] if meta["duration"] > 0 else round(frame_count / fps, 3),
+        "unique": len(patches),
+        "index": index_rel,
     }
 
 
@@ -195,10 +242,13 @@ def write_manifest(out_dir: Path, manifest: dict) -> None:
     lines.append("  videos = {")
     for k, v in sorted(manifest["videos"].items()):
         aud = lua_str(v["audio"]) if v["audio"] else "nil"
+        extra = ""
+        if v.get("index"):
+            extra = f", unique={v['unique']}, index={lua_str(v['index'])}"
         lines.append(
             f"    [{lua_str(k)}] = {{ dir={lua_str(v['dir'])}, pattern={lua_str(v['pattern'])}, "
             f"audio={aud}, fps={v['fps']}, frames={v['frames']}, "
-            f"width={v['width']}, height={v['height']}, duration={v['duration']} }},"
+            f"width={v['width']}, height={v['height']}, duration={v['duration']}{extra} }},"
         )
     lines.append("  },")
 
@@ -224,7 +274,6 @@ def main() -> int:
     parser.add_argument("--workers", type=int, default=os.cpu_count() or 4, help="Parallel worker threads")
     parser.add_argument("--skip-videos", action="store_true", help="Skip .MOV frame extraction")
     parser.add_argument("--only-dxr", action="store_true", help="Only re-export DXR/EXE scores & sprites")
-    parser.add_argument("--video-quality", type=int, default=4, help="ffmpeg JPEG q:v (2=best, 8=smaller)")
     args = parser.parse_args()
 
     src_root = Path(args.source)
@@ -275,11 +324,14 @@ def main() -> int:
         for line in vid_sec.splitlines():
             vm = re.match(
                 r'\s*\["([^"]+)"\] = \{ dir="([^"]+)", pattern="([^"]+)", audio=("([^"]+)"|nil), '
-                r'fps=([0-9.]+), frames=(\d+), width=(\d+), height=(\d+), duration=([0-9.]+) \},',
+                r'fps=([0-9.]+), frames=(\d+), width=(\d+), height=(\d+), duration=([0-9.]+)'
+                r'(?:, unique=(\d+), index="([^"]+)")? \},',
                 line,
             )
             if vm:
                 manifest["videos"][vm.group(1)] = {
+                    "unique": int(vm.group(11)) if vm.group(11) else None,
+                    "index": vm.group(12),
                     "dir": vm.group(2),
                     "pattern": vm.group(3),
                     "audio": vm.group(5) if vm.group(4) != "nil" else None,
@@ -363,7 +415,7 @@ def main() -> int:
                 if rel.endswith(".mov"):
                     key = register_key("videos", normalize_key(path.name), path)
                     rel_dir = f"videos/{key}"
-                    fut = pool.submit(convert_video, path, out_root / rel_dir, rel_dir, args.video_quality)
+                    fut = pool.submit(convert_video, path, out_root / rel_dir, rel_dir)
                     video_futures[fut] = key
 
         # 4. Director 4 .DXR movies

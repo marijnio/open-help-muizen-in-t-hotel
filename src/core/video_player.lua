@@ -32,6 +32,14 @@ function VideoPlayer.new(videoKey, opts)
         onFinish = opts.onFinish,
     }, VideoPlayer)
 
+    -- Optional frame index map: logical frame -> unique (deduplicated) frame file
+    if meta.index then
+        local map = Assets.loadLuaTable(meta.index)
+        if type(map) == "table" and #map > 0 then
+            self.frameMap = map
+        end
+    end
+
     if not self.x then
         self.x = math.floor((640 - self.w) * 0.5)
     end
@@ -61,7 +69,13 @@ function VideoPlayer:loadFrame(idx)
     if idx == self.currentFrameIdx and self.currentImage then
         return
     end
-    local path = string.format(self.meta.pattern, idx)
+    local fileIdx = (self.frameMap and self.frameMap[idx]) or idx
+    if fileIdx == self.currentFileIdx and self.currentImage then
+        -- Held frame: same image as before, skip decoding
+        self.currentFrameIdx = idx
+        return
+    end
+    local path = string.format(self.meta.pattern, fileIdx)
     local img = Assets.loadUncachedImage(path, self.filter)
     if img then
         if self.currentImage and self.currentImage.release then
@@ -69,6 +83,7 @@ function VideoPlayer:loadFrame(idx)
         end
         self.currentImage = img
         self.currentFrameIdx = idx
+        self.currentFileIdx = fileIdx
     end
 end
 
@@ -155,6 +170,7 @@ function VideoPlayer:stop()
         self.currentImage:release()
         self.currentImage = nil
     end
+    self.currentFileIdx = nil
 end
 
 function VideoPlayer:isFinished()

@@ -64,7 +64,8 @@ python3 tools/convert_assets.py --source backup/extracted --output assets
 * `--output <dir>`: Destination directory for converted `.png`, `.wav`, video frame sequences, `dxr/*/score.lua`, and `manifest.lua` (default: `assets`).
 * `--workers <n>`: Number of parallel conversion threads (default: CPU count).
 * `--skip-videos`: Skip `.MOV` frame/audio extraction for quick testing.
-* `--video-quality <q>`: `ffmpeg` JPEG `q:v` quality (`2` = highest quality, `8` = smaller size; default: `4`).
+
+Videos are stored losslessly and compactly: the original QuickTime clips are 8-bit palettized cel animations, so each clip is exported as palette PNG *delta patches* (only the changed rectangle per frame, identical patches stored once) plus a `frames.lua` step index; [src/core/video_player.lua](src/core/video_player.lua) composites the patches onto a canvas during playback.
 
 ### Asset Search Order
 
