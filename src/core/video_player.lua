@@ -27,6 +27,7 @@ function VideoPlayer.new(videoKey, opts)
         y = opts.y,
         w = opts.w or meta.width,
         h = opts.h or meta.height,
+        filter = opts.filter or "nearest",
         onFinish = opts.onFinish,
     }, VideoPlayer)
 
@@ -60,7 +61,7 @@ function VideoPlayer:loadFrame(idx)
         return
     end
     local path = string.format(self.meta.pattern, idx)
-    local img = Assets.loadUncachedImage(path, "linear")
+    local img = Assets.loadUncachedImage(path, self.filter)
     if img then
         if self.currentImage and self.currentImage.release then
             self.currentImage:release()

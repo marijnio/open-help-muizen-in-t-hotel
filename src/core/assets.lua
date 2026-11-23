@@ -224,7 +224,7 @@ function Assets.loadUncachedImage(relPath, filter)
     if not ok then
         return nil
     end
-    local f = filter or "linear"
+    local f = filter or "nearest"
     img:setFilter(f, f)
     return img
 end
