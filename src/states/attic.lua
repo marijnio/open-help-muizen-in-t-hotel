@@ -12,6 +12,9 @@ local Rooms = require("src.data.rooms")
 local Attic = {}
 
 local DIFFICULTY_FPS = { [1] = 8, [2] = 12, [3] = 16 }
+local MOUSE_CATCH_LOCK_SECONDS = 0.40
+local MOUSE_CATCH_LOCK_MIN_SECONDS = 0.15
+local MOUSE_CATCH_LOCK_MAX_FRACTION = 0.40
 local MINIMAP_MOUSE_DOTS = {
     [1] = { x = 487, y = 428 },
     [2] = { x = 487, y = 401 },
@@ -20,6 +23,13 @@ local MINIMAP_MOUSE_DOTS = {
     [5] = { x = 572, y = 401 },
     [6] = { x = 572, y = 428 },
 }
+
+local function computeCatchLockDuration(span)
+    local baseFps = DIFFICULTY_FPS[App.session.difficulty or 1] or 12
+    local spanFrames = math.max(1, (span.endFrame - span.startFrame) + 1)
+    local capped = math.max(MOUSE_CATCH_LOCK_MIN_SECONDS, (spanFrames / baseFps) * MOUSE_CATCH_LOCK_MAX_FRACTION)
+    return math.min(MOUSE_CATCH_LOCK_SECONDS, capped)
+end
 
 local function pointInRect(px, py, r)
     return px >= r.x and px < (r.x + r.w) and py >= r.y and py < (r.y + r.h)
@@ -38,6 +48,7 @@ function Attic:enter()
     self.mode = "idle"
     self.animSpan = nil
     self.animFrameFloat = 1
+    self.mouseCatchLockTimer = 0
     self.traps = Traps.newState({ x = 320, y = 365 })
     self.toast = nil
     self.toastTimer = 0
@@ -166,6 +177,10 @@ function Attic:showToast(msg)
     self.toastTimer = 2.2
 end
 
+function Attic:canCatchMouse()
+    return self.mode == "mouse_run" and (self.mouseCatchLockTimer or 0) <= 0
+end
+
 function Attic:triggerSpot(spotIdx)
     self.traps.menuOpen = false
     local sndNum = (self.curRoom - 1) * 3 + spotIdx
@@ -183,6 +198,8 @@ function Attic:triggerSpot(spotIdx)
             self.mode = "mouse_run"
             self.animSpan = span
             self.animFrameFloat = span.startFrame
+            self.mouseCatchLockTimer = computeCatchLockDuration(span)
+            Cursor.setSystem("arrow")
             return
         end
     end
@@ -200,6 +217,7 @@ function Attic:catchMouse()
     self.hasMouse = false
     self.mouseRoom = nil
     self.mouseSpot = nil
+    self.mouseCatchLockTimer = 0
     Rooms.markRoomCaught(App.session, "attic")
 
     AudioQueue.playSfx("dxr/shared/sounds/s_821.wav", 0.9)
@@ -236,11 +254,18 @@ function Attic:update(dt)
     Traps.update(self.traps, dt)
 
     if self.mode == "idle" or not self.animSpan then
+        self.mouseCatchLockTimer = 0
         return
     end
 
     local playFps = self.fps
     if self.mode == "mouse_run" then
+        if self.mouseCatchLockTimer > 0 then
+            self.mouseCatchLockTimer = math.max(0, self.mouseCatchLockTimer - dt)
+            if self.mouseCatchLockTimer <= 0 then
+                Cursor.setSystem("hand")
+            end
+        end
         playFps = DIFFICULTY_FPS[App.session.difficulty or 1] or 12
         local progress = (self.animFrameFloat - self.animSpan.startFrame) /
             math.max(1, self.animSpan.endFrame - self.animSpan.startFrame)
@@ -272,12 +297,13 @@ function Attic:update(dt)
         end
         self.mode = "idle"
         self.animSpan = nil
+        self.mouseCatchLockTimer = 0
     end
 end
 
 function Attic:mousemoved(vx, vy)
     if self.mode == "mouse_run" then
-        Cursor.setSystem("hand")
+        Cursor.setSystem(self:canCatchMouse() and "hand" or "arrow")
         return
     end
     local hit = self.hotzones:updateHover(vx, vy, App.isTouchMode)
@@ -304,13 +330,15 @@ function Attic:mousepressed(vx, vy, button)
     end
 
     if self.mode == "mouse_run" then
-        local bounds = DirectorStage.getMouseBounds(self.dxrKey, self:currentFrameNumber(), "shared")
-        if bounds then
-            local pad = App.isTouchMode and 26 or 14
-            if vx >= (bounds.x - pad) and vx <= (bounds.x + bounds.w + pad)
-               and vy >= (bounds.y - pad) and vy <= (bounds.y + bounds.h + pad) then
-                self:catchMouse()
-                return
+        if self:canCatchMouse() then
+            local bounds = DirectorStage.getMouseBounds(self.dxrKey, self:currentFrameNumber(), "shared")
+            if bounds then
+                local pad = App.isTouchMode and 26 or 14
+                if vx >= (bounds.x - pad) and vx <= (bounds.x + bounds.w + pad)
+                   and vy >= (bounds.y - pad) and vy <= (bounds.y + bounds.h + pad) then
+                    self:catchMouse()
+                    return
+                end
             end
         end
         if pointInRect(vx, vy, Traps.EXIT_RECT) then
@@ -388,6 +416,17 @@ function Attic:draw(vx, vy)
 
     if App.debugMode then
         self.hotzones:drawDebug(vx, vy)
+        if self.mode == "mouse_run" then
+            local b = DirectorStage.getMouseBounds(self.dxrKey, frameNum, "shared")
+            if b then
+                if self:canCatchMouse() then
+                    love.graphics.setColor(0, 1, 0, 0.9)
+                else
+                    love.graphics.setColor(1, 0.35, 0.2, 0.9)
+                end
+                love.graphics.rectangle("line", b.x - 14, b.y - 14, b.w + 28, b.h + 28)
+            end
+        end
         if self.hasMouse then
             love.graphics.setColor(0.2, 1, 0.4, 1)
             love.graphics.print(

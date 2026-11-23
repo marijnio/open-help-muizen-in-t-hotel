@@ -13,6 +13,9 @@ local Rooms = require("src.data.rooms")
 local Room = {}
 
 local DIFFICULTY_FPS = { [1] = 8, [2] = 12, [3] = 16 }
+local MOUSE_CATCH_LOCK_SECONDS = 0.40
+local MOUSE_CATCH_LOCK_MIN_SECONDS = 0.15
+local MOUSE_CATCH_LOCK_MAX_FRACTION = 0.40
 local WIPE_DURATION = 1.4
 local HINT_VIDEOS = { "cathelp7", "cathelp9", "cathel10", "cathel11" }
 local CATCH_DANGLING_CASTS = { 707, 708, 709, 710, 711 }
@@ -20,6 +23,13 @@ local CATCH_HANG_DURATION = 0.45
 local CATCH_MOVE_DURATION = 0.50
 local CATCH_HOLD_DURATION = 0.16
 local CATCH_WIGGLE_FPS = 12
+
+local function computeCatchLockDuration(span)
+    local baseFps = DIFFICULTY_FPS[App.session.difficulty or 1] or 12
+    local spanFrames = math.max(1, (span.endFrame - span.startFrame) + 1)
+    local capped = math.max(MOUSE_CATCH_LOCK_MIN_SECONDS, (spanFrames / baseFps) * MOUSE_CATCH_LOCK_MAX_FRACTION)
+    return math.min(MOUSE_CATCH_LOCK_SECONDS, capped)
+end
 
 local function pointInRect(px, py, r)
     return px >= r.x and px < (r.x + r.w) and py >= r.y and py < (r.y + r.h)
@@ -62,6 +72,7 @@ function Room:enter(params)
     self.animSpan = nil
     self.animFrameFloat = 1
     self.animDestSpot = nil
+    self.mouseCatchLockTimer = 0
     self.catchAnim = nil
     self.caughtPlayer = nil
     self.toast = nil
@@ -219,6 +230,10 @@ function Room:findMouseRunSpan(fromSpot)
     return pick.dest, pick.span
 end
 
+function Room:canCatchMouse()
+    return self.mode == "mouse_run" and (self.mouseCatchLockTimer or 0) <= 0
+end
+
 function Room:triggerSpot(spotId)
     self.traps.menuOpen = false
     self:playSpotSound(spotId)
@@ -231,6 +246,8 @@ function Room:triggerSpot(spotId)
             self.animSpan = span
             self.animFrameFloat = span.startFrame
             self.animDestSpot = dest
+            self.mouseCatchLockTimer = computeCatchLockDuration(span)
+            Cursor.setSystem("arrow")
             return
         end
     end
@@ -292,6 +309,7 @@ end
 function Room:catchMouse(catchX, catchY)
     self.hasMouse = false
     self.mouseSpot = nil
+    self.mouseCatchLockTimer = 0
     Rooms.markRoomCaught(App.session, self.room.id)
 
     self.traps.active = nil
@@ -438,11 +456,18 @@ function Room:update(dt)
 
     if not self.animSpan then
         self.mode = "idle"
+        self.mouseCatchLockTimer = 0
         return
     end
 
     local playFps = self.fps
     if self.mode == "mouse_run" then
+        if self.mouseCatchLockTimer > 0 then
+            self.mouseCatchLockTimer = math.max(0, self.mouseCatchLockTimer - dt)
+            if self.mouseCatchLockTimer <= 0 then
+                Cursor.setSystem("hand")
+            end
+        end
         playFps = DIFFICULTY_FPS[App.session.difficulty or 1] or 12
         local progress = (self.animFrameFloat - self.animSpan.startFrame)
                 / math.max(1, self.animSpan.endFrame - self.animSpan.startFrame)
@@ -468,13 +493,14 @@ function Room:update(dt)
         end
         self.mode = "idle"
         self.animSpan = nil
+        self.mouseCatchLockTimer = 0
     end
 end
 
 function Room:mousemoved(vx, vy)
     if self.mode == "entering" or self.mode == "caught" or self.mode == "caught_video" then return end
     if self.mode == "mouse_run" then
-        Cursor.setSystem("hand")
+        Cursor.setSystem(self:canCatchMouse() and "hand" or "arrow")
         return
     end
     local hit = self.hotzones:updateHover(vx, vy, App.isTouchMode)
@@ -512,13 +538,15 @@ function Room:mousepressed(vx, vy, button)
 
     -- Catching a running mouse takes priority over hiding-spot zones
     if self.mode == "mouse_run" then
-        local bounds = DirectorStage.getMouseBounds(self.dxrKey, self:currentFrameNumber(), "shared")
-        if bounds then
-            local pad = App.isTouchMode and 26 or 14
-            if vx >= (bounds.x - pad) and vx <= (bounds.x + bounds.w + pad)
-                    and vy >= (bounds.y - pad) and vy <= (bounds.y + bounds.h + pad) then
-                self:catchMouse(vx, vy)
-                return
+        if self:canCatchMouse() then
+            local bounds = DirectorStage.getMouseBounds(self.dxrKey, self:currentFrameNumber(), "shared")
+            if bounds then
+                local pad = App.isTouchMode and 26 or 14
+                if vx >= (bounds.x - pad) and vx <= (bounds.x + bounds.w + pad)
+                        and vy >= (bounds.y - pad) and vy <= (bounds.y + bounds.h + pad) then
+                    self:catchMouse(vx, vy)
+                    return
+                end
             end
         end
         -- Allow exiting or opening traps/help even during a run
@@ -672,7 +700,11 @@ function Room:draw(vx, vy)
         if self.mode == "mouse_run" then
             local b = DirectorStage.getMouseBounds(self.dxrKey, frameNum, "shared")
             if b then
-                love.graphics.setColor(0, 1, 0, 0.9)
+                if self:canCatchMouse() then
+                    love.graphics.setColor(0, 1, 0, 0.9)
+                else
+                    love.graphics.setColor(1, 0.35, 0.2, 0.9)
+                end
                 love.graphics.rectangle("line", b.x - 14, b.y - 14, b.w + 28, b.h + 28)
             end
         end
