@@ -49,6 +49,7 @@ function Instrum:enter(params)
     self.animFrameFloat = self.selectFrame
     self.idleTimer = 0
     self.soloTimer = 0
+    self.loopTimer = 0
     self.soloStarted = false
     self.hoveredFamily = nil
     self.rejectCooldown = 0
@@ -150,7 +151,6 @@ function Instrum:chooseFamily(fam)
     self.idleTimer = 0
     AudioQueue.stopVo()
     self:stopRejectSfx()
-    self:stopRejectSfx()
     if fam.family == self.target.family then
         self.rejectCooldown = 0
         App.session.foundInstruments = App.session.foundInstruments or {}
@@ -158,6 +158,7 @@ function Instrum:chooseFamily(fam)
         App.session.lastInstrument = self.target.id
 
         self.soloTimer = 0
+        self.loopTimer = 0
         self.soloStarted = false
         if App.session.musicEnabled ~= false then
             AudioQueue.playMusic({ group = "solos", key = self.target.id }, { loop = false, volume = 0.82 })
@@ -175,6 +176,7 @@ function Instrum:chooseFamily(fam)
             self.animSpan = loopSpan
             self.animFrameFloat = loopSpan and loopSpan.startFrame or self.selectFrame
         end
+        Cursor.setSystem("arrow")
     else
         self.rejectCooldown = REJECT_COOLDOWN
         if fam.rejectSfx then
@@ -225,10 +227,14 @@ function Instrum:update(dt)
 
     if self.mode == "accept_intro" or self.mode == "accept_loop" then
         self.soloTimer = self.soloTimer + dt
-        local playing = AudioQueue.musicSource and AudioQueue.musicSource:isPlaying()
-        if (self.soloStarted and not playing and self.soloTimer >= 1.5) or (not self.soloStarted and self.soloTimer >= 3.5) then
-            self:completeMatching()
-            return
+        if self.mode == "accept_loop" then
+            self.loopTimer = self.loopTimer + dt
+            local playing = AudioQueue.musicSource and AudioQueue.musicSource:isPlaying()
+            if (self.soloStarted and not playing and self.soloTimer >= 1.5)
+                    or (not self.soloStarted and self.soloTimer >= 3.5 and self.loopTimer >= 1.0) then
+                self:completeMatching()
+                return
+            end
         end
     end
 
@@ -243,6 +249,7 @@ function Instrum:update(dt)
             local loopSpan = self.spans[self.target.loopLabel]
             if loopSpan then
                 self.mode = "accept_loop"
+                self.loopTimer = 0
                 self.animSpan = loopSpan
                 self.animFrameFloat = loopSpan.startFrame
             else
@@ -259,7 +266,7 @@ end
 
 function Instrum:mousemoved(vx, vy)
     if self.mode == "accept_intro" or self.mode == "accept_loop" then
-        Cursor.setSystem("hand")
+        Cursor.setSystem("arrow")
         return
     end
     local hit = self.hotzones:updateHover(vx, vy, App.isTouchMode)
@@ -270,7 +277,6 @@ end
 function Instrum:mousepressed(vx, vy, button)
     if button ~= 1 then return end
     if self.mode == "accept_intro" or self.mode == "accept_loop" then
-        self:completeMatching()
         return
     end
     self.hotzones:click(vx, vy)
@@ -278,11 +284,7 @@ end
 
 function Instrum:keypressed(key)
     if self.mode == "accept_intro" or self.mode == "accept_loop" then
-        if key == "space" or key == "return" or key == "escape" then
-            self:completeMatching()
-            return true
-        end
-        return false
+        return true
     end
     if key == "escape" then
         self:completeMatching()
@@ -309,7 +311,7 @@ function Instrum:draw(vx, vy)
     love.graphics.setColor(0.95, 0.92, 0.68, 1)
     local msg
     if self.mode == "accept_intro" or self.mode == "accept_loop" then
-        msg = string.format("Gevonden: %s! • Klik of druk op Esc voor het orkest", self.target.name)
+        msg = string.format("Gevonden: %s!", self.target.name)
     elseif self.hoveredFamily then
         msg = string.format("Welk instrument hoort bij deze muis? • %s", self.hoveredFamily.label)
     else
