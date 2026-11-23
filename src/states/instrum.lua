@@ -53,7 +53,11 @@ function Instrum:enter(params)
     self:buildHotzones()
 
     local rndIdx = love.math.random(1, 7)
+    self.introVoPending = true
     AudioQueue.clearAndPlay({ group = "endsound", key = "random" .. tostring(rndIdx) })
+    if not App.isTouchMode and App.lastVx and App.lastVy then
+        self:mousemoved(App.lastVx, App.lastVy)
+    end
 end
 
 function Instrum:stopRejectSfx()
@@ -64,7 +68,7 @@ function Instrum:stopRejectSfx()
 end
 
 function Instrum:canChooseInstrument()
-    if self.rejectCooldown > 0 then
+    if self.introVoPending or self.rejectCooldown > 0 then
         return false
     end
     return self.mode == "select" or self.mode == "bored" or self.mode == "reject"
@@ -206,6 +210,13 @@ function Instrum:completeMatching()
 end
 
 function Instrum:update(dt)
+    if self.introVoPending and not AudioQueue.paused and not AudioQueue.isPlaying() then
+        self.introVoPending = false
+        if not App.isTouchMode and App.lastVx and App.lastVy then
+            self:mousemoved(App.lastVx, App.lastVy)
+        end
+    end
+
     if self.rejectCooldown > 0 then
         self.rejectCooldown = math.max(0, self.rejectCooldown - dt)
         if self.rejectCooldown == 0 and not App.isTouchMode and App.lastVx and App.lastVy then
@@ -214,12 +225,14 @@ function Instrum:update(dt)
     end
 
     if self.mode == "select" then
-        self.idleTimer = self.idleTimer + dt
-        if self.idleTimer >= 14.0 and self.spans["bored"] then
-            self.idleTimer = 0
-            self.mode = "bored"
-            self.animSpan = self.spans["bored"]
-            self.animFrameFloat = self.animSpan.startFrame
+        if not self.introVoPending then
+            self.idleTimer = self.idleTimer + dt
+            if self.idleTimer >= 14.0 and self.spans["bored"] then
+                self.idleTimer = 0
+                self.mode = "bored"
+                self.animSpan = self.spans["bored"]
+                self.animFrameFloat = self.animSpan.startFrame
+            end
         end
         return
     end
