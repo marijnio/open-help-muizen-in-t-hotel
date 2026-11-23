@@ -223,6 +223,7 @@ def main() -> int:
     parser.add_argument("--output", default="assets", help="Output assets directory")
     parser.add_argument("--workers", type=int, default=os.cpu_count() or 4, help="Parallel worker threads")
     parser.add_argument("--skip-videos", action="store_true", help="Skip .MOV frame extraction")
+    parser.add_argument("--only-dxr", action="store_true", help="Only re-export DXR/EXE scores & sprites")
     parser.add_argument("--video-quality", type=int, default=4, help="ffmpeg JPEG q:v (2=best, 8=smaller)")
     args = parser.parse_args()
 
@@ -237,8 +238,8 @@ def main() -> int:
     print(f"Indexed {len(files)} files from {src_root}")
 
     if out_root.exists():
-        # Clean previous generated manifest & subdirs safely
-        for sub in ("images", "audio", "videos", "dxr"):
+        clean_subs = ("dxr",) if args.only_dxr else (("images", "audio", "dxr") if args.skip_videos else ("images", "audio", "videos", "dxr"))
+        for sub in clean_subs:
             sp = out_root / sub
             if sp.exists():
                 shutil.rmtree(sp)
@@ -251,6 +252,43 @@ def main() -> int:
         "dxr": {},
         "music_builds": {},
     }
+
+    # If preserving existing videos or non-dxr sections, recover their manifest metadata from disk
+    manifest_path = out_root / "manifest.lua"
+    if (args.only_dxr or args.skip_videos) and manifest_path.is_file():
+        prev_txt = manifest_path.read_text(encoding="utf-8")
+        if args.only_dxr:
+            for k, v in re.findall(r'\["([^"]+)"\] = "([^"]+)"', prev_txt.split("  images = {")[1].split("  },")[0]):
+                manifest["images"][k] = v
+            aud_sec = prev_txt.split("  audio = {")[1].split("  },\n  videos = {")[0]
+            cur_g = None
+            for line in aud_sec.splitlines():
+                gm = re.match(r'\s*\["([^"]+)"\] = \{', line)
+                if gm:
+                    cur_g = gm.group(1)
+                    manifest["audio"][cur_g] = {}
+                elif cur_g:
+                    am = re.match(r'\s*\["([^"]+)"\] = "([^"]+)"', line)
+                    if am:
+                        manifest["audio"][cur_g][am.group(1)] = am.group(2)
+        vid_sec = prev_txt.split("  videos = {")[1].split("  },\n  dxr = {")[0]
+        for line in vid_sec.splitlines():
+            vm = re.match(
+                r'\s*\["([^"]+)"\] = \{ dir="([^"]+)", pattern="([^"]+)", audio=("([^"]+)"|nil), '
+                r'fps=([0-9.]+), frames=(\d+), width=(\d+), height=(\d+), duration=([0-9.]+) \},',
+                line,
+            )
+            if vm:
+                manifest["videos"][vm.group(1)] = {
+                    "dir": vm.group(2),
+                    "pattern": vm.group(3),
+                    "audio": vm.group(5) if vm.group(4) != "nil" else None,
+                    "fps": float(vm.group(6)),
+                    "frames": int(vm.group(7)),
+                    "width": int(vm.group(8)),
+                    "height": int(vm.group(9)),
+                    "duration": float(vm.group(10)),
+                }
 
     # Parse music build orders
     for b in ("build1", "build2", "build3"):
@@ -278,13 +316,14 @@ def main() -> int:
 
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         # 1. BMPs
-        for rel, path in sorted(files.items()):
-            if rel.endswith(".bmp"):
-                prefix = "pic_" if rel.startswith("pictures/") else ""
-                key = register_key("images", prefix + normalize_key(path.name), path)
-                out_rel = f"images/bmp/{key}.png"
-                manifest["images"][key] = out_rel
-                tasks.append(pool.submit(convert_bmp, path, out_root / out_rel))
+        if not args.only_dxr:
+            for rel, path in sorted(files.items()):
+                if rel.endswith(".bmp"):
+                    prefix = "pic_" if rel.startswith("pictures/") else ""
+                    key = register_key("images", prefix + normalize_key(path.name), path)
+                    out_rel = f"images/bmp/{key}.png"
+                    manifest["images"][key] = out_rel
+                    tasks.append(pool.submit(convert_bmp, path, out_root / out_rel))
 
         # 2. Audio (.aif & .wav, skipping redundant 8-bit music8/solos8)
         audio_groups = {
@@ -297,28 +336,29 @@ def main() -> int:
             "endsound/": "endsound",
             "super/sounds/": "super_sounds",
         }
-        for rel, path in sorted(files.items()):
-            if rel.startswith(("music8/", "solos8/")):
-                continue
-            if not (rel.endswith(".aif") or rel.endswith(".wav")):
-                continue
-            group = None
-            for prefix, gname in audio_groups.items():
-                if rel.startswith(prefix):
-                    group = gname
-                    break
-            if group is None and "/" not in rel:
-                group = "root"
-            if group is None:
-                continue
-            key = register_key(f"audio.{group}", normalize_key(path.name), path)
-            out_rel = f"audio/{group}/{key}.wav"
-            manifest["audio"].setdefault(group, {})[key] = out_rel
-            tasks.append(pool.submit(convert_audio, path, out_root / out_rel))
+        if not args.only_dxr:
+            for rel, path in sorted(files.items()):
+                if rel.startswith(("music8/", "solos8/")):
+                    continue
+                if not (rel.endswith(".aif") or rel.endswith(".wav")):
+                    continue
+                group = None
+                for prefix, gname in audio_groups.items():
+                    if rel.startswith(prefix):
+                        group = gname
+                        break
+                if group is None and "/" not in rel:
+                    group = "root"
+                if group is None:
+                    continue
+                key = register_key(f"audio.{group}", normalize_key(path.name), path)
+                out_rel = f"audio/{group}/{key}.wav"
+                manifest["audio"].setdefault(group, {})[key] = out_rel
+                tasks.append(pool.submit(convert_audio, path, out_root / out_rel))
 
         # 3. Videos (.mov)
         video_futures = {}
-        if not args.skip_videos:
+        if not args.skip_videos and not args.only_dxr:
             for rel, path in sorted(files.items()):
                 if rel.endswith(".mov"):
                     key = register_key("videos", normalize_key(path.name), path)

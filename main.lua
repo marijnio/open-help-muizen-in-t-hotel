@@ -18,6 +18,7 @@ App = {
         caughtMice = {},
         caughtCount = 0,
         mouseRooms = {},
+        seenIntros = {},
         buildIndex = 1,
     },
     states = {},
@@ -44,6 +45,8 @@ function love.load()
         intro = require("src.states.intro"),
         start_menu = require("src.states.start_menu"),
         hotel_hub = require("src.states.hotel_hub"),
+        room = require("src.states.room"),
+        attic = require("src.states.attic"),
         gallery = require("src.states.gallery"),
     }
 

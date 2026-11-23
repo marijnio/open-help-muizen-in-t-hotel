@@ -109,13 +109,24 @@ function MediaPreviewOverlay:draw()
     love.graphics.pop()
 end
 
-function HotelHub:enter()
+function HotelHub:enter(params)
     self.frameNum = DirectorStage.getLabelFrame("ggmdmenu", "select") or 14
     self.hotzones = Hotzone.new()
     self.detectedRoom = nil
     self.touchSelectedRoomId = nil
     self.scannerVisible = false
     self.lastScanSfxAt = -10
+    self.banner = nil
+    self.bannerTimer = 0
+    if params and params.justCaught then
+        local caught = (App.session and App.session.caughtCount) or 0
+        if caught >= 19 then
+            self.banner = "Alle 19 muizen gevangen! (Orkest & Finale in Milestone 3)"
+        else
+            self.banner = string.format("Muis gevangen in %s! (%d/19)", params.justCaught, caught)
+        end
+        self.bannerTimer = 3.5
+    end
 
     for _, room in ipairs(Rooms.LIST) do
         self.hotzones:add({
@@ -207,12 +218,20 @@ function HotelHub:onRoomClick(room)
         return
     end
 
-    SceneManager.setOverlay(MediaPreviewOverlay, {
-        title = room.title,
-        videoKey = room.mov,
-        roomDxr = room.dxr,
-        isHint = false,
-    })
+    if room.id == "attic" then
+        SceneManager.switch(App.states.attic)
+    else
+        SceneManager.switch(App.states.room, { room = room })
+    end
+end
+
+function HotelHub:update(dt)
+    if self.bannerTimer > 0 then
+        self.bannerTimer = self.bannerTimer - dt
+        if self.bannerTimer <= 0 then
+            self.banner = nil
+        end
+    end
 end
 
 function HotelHub:promptExit()
@@ -282,6 +301,26 @@ function HotelHub:draw(vx, vy)
     DirectorStage.drawFrame("ggmdmenu", self.frameNum, {
         hiddenChannels = { [25] = true },
     })
+
+    -- Subtle badge on rooms where a mouse has already been caught
+    local caughtMap = (App.session and App.session.caughtMice) or {}
+    for _, r in ipairs(Rooms.LIST) do
+        if caughtMap[r.id] then
+            love.graphics.setColor(0.12, 0.55, 0.22, 0.78)
+            love.graphics.circle("fill", r.x + r.w - 12, r.y + 12, 9)
+            love.graphics.setColor(1, 1, 1, 1)
+            love.graphics.print("✓", r.x + r.w - 17, r.y + 4)
+        end
+    end
+
+    if self.banner then
+        love.graphics.setColor(0.08, 0.28, 0.14, 0.94)
+        love.graphics.rectangle("fill", 90, 412, 460, 28, 6, 6)
+        love.graphics.setColor(0.55, 1.0, 0.55, 1)
+        love.graphics.rectangle("line", 90, 412, 460, 28, 6, 6)
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.printf(self.banner, 94, 419, 452, "center")
+    end
 
     -- Highlight hovered/selected room subtly + draw bottom bar status
     local caught = (App.session and App.session.caughtCount) or 0

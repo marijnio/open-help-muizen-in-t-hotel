@@ -290,11 +290,8 @@ class DirectorMovie:
                 labels[fr] = lbl
         return labels
 
-    def parse_frames(self) -> List[List[dict]]:
+    def parse_score_bytes(self, sc: bytes) -> List[List[dict]]:
         frames: List[List[dict]] = []
-        if b"VWSC" not in self.by_tag:
-            return frames
-        sc = self.chunk(self.by_tag[b"VWSC"][0].idx)
         if len(sc) < 20:
             return frames
         total_sz = struct.unpack(">I", sc[0:4])[0]
@@ -336,6 +333,11 @@ class DirectorMovie:
             frames.append(sprites)
             fpos = fend
         return frames
+
+    def parse_frames(self) -> List[List[dict]]:
+        if b"VWSC" not in self.by_tag:
+            return []
+        return self.parse_score_bytes(self.chunk(self.by_tag[b"VWSC"][0].idx))
 
     def resolve_palette(
         self, clut_id: int, shared: Optional["DirectorMovie"] = None
@@ -492,11 +494,22 @@ class DirectorMovie:
         labels = self.parse_labels()
         frames = self.parse_frames()
 
-        # Infer dominant ink per cast member from VWSC
+        # Pre-parse SCVW FilmLoop cast chunks so their sprites inform cast_inks
+        filmloops: Dict[int, List[List[dict]]] = {}
+        for cast_id, cidx in sorted(self.cast_slots.items()):
+            scvw_idx = self.keymap.get((cidx, b"SCVW"))
+            if scvw_idx is not None:
+                filmloops[cast_id] = self.parse_score_bytes(self.chunk(scvw_idx))
+
+        # Infer dominant ink per cast member from VWSC and all SCVW filmloops
         cast_inks: Dict[int, set] = {}
         for fr in frames:
             for sp in fr:
                 cast_inks.setdefault(sp["cast"], set()).add(sp["ink"])
+        for fl_frames in filmloops.values():
+            for fr in fl_frames:
+                for sp in fr:
+                    cast_inks.setdefault(sp["cast"], set()).add(sp["ink"])
 
         casts_out: Dict[int, dict] = {}
         sprite_count = 0
@@ -570,6 +583,9 @@ class DirectorMovie:
                         entry["sound"] = f"{assets_rel_prefix}/sounds/{fname}"
                         sound_count += 1
 
+            elif ctype == 2 and cast_id in filmloops:  # FilmLoop
+                entry["filmloop"] = filmloops[cast_id]
+
             elif ctype == 3:  # Text
                 stxt_idx = self.keymap.get((cidx, b"STXT"))
                 if stxt_idx is not None:
@@ -634,6 +650,15 @@ class DirectorMovie:
                 parts.append(f"sound = {_lua_quote(info['sound'])}")
             if "text" in info:
                 parts.append(f"text = {_lua_quote(info['text'])}")
+            if "filmloop" in info and info["filmloop"]:
+                fl_strs = []
+                for fl_fr in info["filmloop"]:
+                    sps = ",".join(
+                        f"{{ch={sp['ch']},cast={sp['cast']},x={sp['x']},y={sp['y']},w={sp['w']},h={sp['h']},ink={sp['ink']}}}"
+                        for sp in fl_fr
+                    )
+                    fl_strs.append(f"{{{sps}}}")
+                parts.append(f"filmloop = {{ {','.join(fl_strs)} }}")
             lines.append(f"    [{cid}] = {{ {', '.join(parts)} }},")
         lines.append("  },")
         lines.append("  frames = {")
