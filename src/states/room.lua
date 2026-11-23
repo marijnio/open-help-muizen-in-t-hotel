@@ -11,7 +11,8 @@ local VideoPlayer = require("src.core.video_player")
 
 local Room = {}
 
-local DIFFICULTY_SPEED = { [1] = 0.78, [2] = 1.10, [3] = 1.45 }
+local DIFFICULTY_FPS = { [1] = 8, [2] = 12, [3] = 16 }
+local WIPE_DURATION = 1.4
 local HINT_VIDEOS = { "cathelp7", "cathelp9", "cathel10", "cathel11" }
 
 local function pointInRect(px, py, r)
@@ -38,8 +39,10 @@ function Room:enter(params)
     self.animSpan = nil
     self.animFrameFloat = 1
     self.animDestSpot = nil
+    self.caughtPlayer = nil
     self.toast = nil
     self.toastTimer = 0
+    self.wipeProgress = 0
 
     -- Place mouse in a valid hiding spot if this room still has a mouse
     self.hasMouse = App.session.mouseRooms and App.session.mouseRooms[self.room.id] == true
@@ -61,51 +64,32 @@ function Room:enter(params)
 
     self:buildHotzones()
 
-    local seen = App.session.seenIntros and App.session.seenIntros[self.room.id]
-    if self.room.mov and not seen then
-        App.session.seenIntros = App.session.seenIntros or {}
-        App.session.seenIntros[self.room.id] = true
-        self.mode = "intro"
-        self.introPlayer = VideoPlayer.new(self.room.mov, {
-            onFinish = function()
-                self:finishIntro()
-            end,
-        })
-        if not self.introPlayer then
-            self:finishIntro()
-        end
-    else
-        self:finishIntro()
-    end
-end
-
-function Room:finishIntro()
-    if self.introPlayer then
-        self.introPlayer:stop()
-        self.introPlayer = nil
-    end
-    self.mode = "idle"
-    self:startAmbientAudio()
-end
-
-function Room:startAmbientAudio()
-    if App.session.musicEnabled ~= false and self.meta.ambientSound then
+    -- Play room entry music (startsnd) during the slow wipe reveal, matching original behavior
+    self.mode = "entering"
+    if App.session.musicEnabled ~= false and self.room.startsnd then
+        AudioQueue.playMusic({ group = "startsnd", key = self.room.startsnd }, { loop = false, volume = 0.65 })
+    elseif App.session.musicEnabled ~= false and self.meta.ambientSound then
         AudioQueue.playMusic(self.meta.ambientSound, { loop = true, volume = 0.45 })
     end
 end
 
+function Room:finishEntering()
+    self.wipeProgress = 1
+    self.mode = "idle"
+end
+
 function Room:exit()
-    if self.introPlayer then
-        self.introPlayer:stop()
-        self.introPlayer = nil
+    if self.caughtPlayer then
+        self.caughtPlayer:stop()
+        self.caughtPlayer = nil
     end
     AudioQueue.stopAll()
     Cursor.reset()
 end
 
 function Room:onFocus(focused)
-    if self.introPlayer then
-        if focused then self.introPlayer:resume() else self.introPlayer:pause() end
+    if self.caughtPlayer then
+        if focused then self.caughtPlayer:resume() else self.caughtPlayer:pause() end
     end
 end
 
@@ -249,6 +233,32 @@ function Room:currentFrameNumber()
     return self:currentIdleFrame()
 end
 
+function Room:startCaughtVideo()
+    if self.room.mov then
+        AudioQueue.stopAll()
+        self.mode = "caught_video"
+        self.caughtPlayer = VideoPlayer.new(self.room.mov, {
+            onFinish = function()
+                self:finishRoomCapture()
+            end,
+        })
+        if self.caughtPlayer then
+            return
+        end
+    end
+    local rndIdx = love.math.random(1, 7)
+    AudioQueue.clearAndPlay({ group = "endsound", key = "random" .. rndIdx })
+    self:finishRoomCapture()
+end
+
+function Room:finishRoomCapture()
+    if self.caughtPlayer then
+        self.caughtPlayer:stop()
+        self.caughtPlayer = nil
+    end
+    SceneManager.switch(App.states.hotel_hub, { justCaught = self.room.title })
+end
+
 function Room:catchMouse()
     self.hasMouse = false
     self.mouseSpot = nil
@@ -262,17 +272,18 @@ function Room:catchMouse()
     end
     App.session.caughtCount = count
 
+    AudioQueue.stopMusic()
     AudioQueue.playSfx("dxr/shared/sounds/s_821.wav", 0.9)
-    local rndIdx = love.math.random(1, 7)
-    AudioQueue.clearAndPlay({ group = "endsound", key = "random" .. rndIdx })
 
     local caughtSpan = self.spans["caught"]
     if caughtSpan then
         self.mode = "caught"
-        self.animSpan = caughtSpan
+        -- Trim the trailing DigitalVideo placeholder frames right before blanky
+        local endF = math.min(caughtSpan.endFrame, caughtSpan.startFrame + 7)
+        self.animSpan = { startFrame = caughtSpan.startFrame, endFrame = endF }
         self.animFrameFloat = caughtSpan.startFrame
     else
-        SceneManager.switch(App.states.hotel_hub, { justCaught = self.room.title })
+        self:startCaughtVideo()
     end
 end
 
@@ -284,9 +295,17 @@ function Room:update(dt)
         end
     end
 
-    if self.mode == "intro" then
-        if self.introPlayer then
-            self.introPlayer:update(dt)
+    if self.mode == "entering" then
+        self.wipeProgress = self.wipeProgress + dt / WIPE_DURATION
+        if self.wipeProgress >= 1 then
+            self:finishEntering()
+        end
+        return
+    end
+
+    if self.mode == "caught_video" then
+        if self.caughtPlayer then
+            self.caughtPlayer:update(dt)
         end
         return
     end
@@ -316,9 +335,9 @@ function Room:update(dt)
         return
     end
 
-    local speedMult = 1.0
+    local playFps = self.fps
     if self.mode == "mouse_run" then
-        speedMult = DIFFICULTY_SPEED[App.session.difficulty or 1] or 1.0
+        playFps = DIFFICULTY_FPS[App.session.difficulty or 1] or 12
         local progress = (self.animFrameFloat - self.animSpan.startFrame) /
             math.max(1, self.animSpan.endFrame - self.animSpan.startFrame)
         if self.traps.active then
@@ -326,15 +345,15 @@ function Room:update(dt)
                 Traps.spring(self.traps)
             end
             if self.traps.active.sprung then
-                speedMult = speedMult * 0.42
+                playFps = playFps * 0.42
             end
         end
     end
 
-    self.animFrameFloat = self.animFrameFloat + dt * self.fps * speedMult
+    self.animFrameFloat = self.animFrameFloat + dt * playFps
     if self.animFrameFloat > self.animSpan.endFrame + 0.99 then
         if self.mode == "caught" then
-            SceneManager.switch(App.states.hotel_hub, { justCaught = self.room.title })
+            self:startCaughtVideo()
             return
         elseif self.mode == "mouse_run" then
             AudioQueue.playSfx("dxr/shared/sounds/s_822.wav", 0.65)
@@ -350,7 +369,7 @@ function Room:update(dt)
 end
 
 function Room:mousemoved(vx, vy)
-    if self.mode == "intro" then return end
+    if self.mode == "entering" or self.mode == "caught_video" then return end
     if self.mode == "mouse_run" then
         Cursor.setSystem("hand")
         return
@@ -361,8 +380,12 @@ end
 
 function Room:mousepressed(vx, vy, button)
     if button ~= 1 then return end
-    if self.mode == "intro" then
-        self:finishIntro()
+    if self.mode == "entering" then
+        self:finishEntering()
+        return
+    end
+    if self.mode == "caught_video" then
+        self:finishRoomCapture()
         return
     end
 
@@ -405,9 +428,19 @@ function Room:mousepressed(vx, vy, button)
 end
 
 function Room:keypressed(key)
-    if self.mode == "intro" then
+    if self.mode == "entering" then
+        if key == "space" or key == "return" then
+            self:finishEntering()
+            return true
+        elseif key == "escape" then
+            SceneManager.switch(App.states.hotel_hub)
+            return true
+        end
+        return false
+    end
+    if self.mode == "caught_video" then
         if key == "escape" or key == "space" or key == "return" then
-            self:finishIntro()
+            self:finishRoomCapture()
             return true
         end
         return false
@@ -428,9 +461,9 @@ function Room:draw(vx, vy)
     love.graphics.setColor(0, 0, 0, 1)
     love.graphics.rectangle("fill", 0, 0, 640, 480)
 
-    if self.mode == "intro" then
-        if self.introPlayer then
-            self.introPlayer:draw()
+    if self.mode == "caught_video" then
+        if self.caughtPlayer then
+            self.caughtPlayer:draw()
         end
         love.graphics.setColor(0, 0, 0, 0.55)
         love.graphics.rectangle("fill", 454, 450, 180, 24, 5, 5)
@@ -441,11 +474,23 @@ function Room:draw(vx, vy)
     end
 
     local frameNum = self:currentFrameNumber()
+    if self.mode == "entering" then
+        local wipeW = math.max(1, math.min(640, math.floor(640 * self.wipeProgress)))
+        love.graphics.setScissor(0, 0, wipeW, 480)
+    end
+
     -- Hide built-in trap popup channels 41..45 and show our clean interactive menu instead
     DirectorStage.drawFrame(self.dxrKey, frameNum, {
         loopTick = self.loopTick,
         hiddenChannels = { [41] = true, [42] = true, [43] = true, [44] = true, [45] = true },
     })
+
+    if self.mode == "entering" then
+        love.graphics.setScissor()
+        local wipeX = math.floor(640 * self.wipeProgress)
+        love.graphics.setColor(0.9, 0.85, 0.5, 0.35)
+        love.graphics.rectangle("fill", wipeX, 0, 2, 480)
+    end
 
     Traps.drawActive(self.traps)
     Traps.drawToolbarHud(self.traps, self.room.title, self.hasMouse)

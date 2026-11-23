@@ -10,7 +10,7 @@ local Traps = require("src.core.traps")
 
 local Attic = {}
 
-local DIFFICULTY_SPEED = { [1] = 0.78, [2] = 1.10, [3] = 1.45 }
+local DIFFICULTY_FPS = { [1] = 8, [2] = 12, [3] = 16 }
 local MINIMAP_MOUSE_DOTS = {
     [1] = { x = 487, y = 428 },
     [2] = { x = 487, y = 401 },
@@ -246,9 +246,9 @@ function Attic:update(dt)
         return
     end
 
-    local speedMult = 1.0
+    local playFps = self.fps
     if self.mode == "mouse_run" then
-        speedMult = DIFFICULTY_SPEED[App.session.difficulty or 1] or 1.0
+        playFps = DIFFICULTY_FPS[App.session.difficulty or 1] or 12
         local progress = (self.animFrameFloat - self.animSpan.startFrame) /
             math.max(1, self.animSpan.endFrame - self.animSpan.startFrame)
         if self.traps.active then
@@ -256,12 +256,12 @@ function Attic:update(dt)
                 Traps.spring(self.traps)
             end
             if self.traps.active.sprung then
-                speedMult = speedMult * 0.42
+                playFps = playFps * 0.42
             end
         end
     end
 
-    self.animFrameFloat = self.animFrameFloat + dt * self.fps * speedMult
+    self.animFrameFloat = self.animFrameFloat + dt * playFps
     if self.animFrameFloat > self.animSpan.endFrame + 0.99 then
         if self.mode == "caught" then
             SceneManager.switch(App.states.hotel_hub, { justCaught = "Zolder" })
