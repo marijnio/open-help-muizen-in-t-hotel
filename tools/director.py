@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import struct
+import subprocess
 import wave
 from collections import deque
 from dataclasses import dataclass
@@ -462,6 +463,36 @@ class DirectorMovie:
                         transparent[np] = 1
                         q.append(np)
 
+        has_trans = any(transparent)
+        color_map: Dict[Tuple[int, int, int], int] = {}
+        out_idx = bytearray(w * h)
+        start_idx = 1 if has_trans else 0
+        use_palette = True
+
+        for i, idx in enumerate(indices):
+            if transparent[i]:
+                out_idx[i] = 0
+            else:
+                rgb = ((0, 0, 0) if idx == 255 else (255, 255, 255)) if depth == 1 else pal[idx]
+                pi = color_map.get(rgb)
+                if pi is None:
+                    pi = start_idx + len(color_map)
+                    if pi >= 256:
+                        use_palette = False
+                        break
+                    color_map[rgb] = pi
+                out_idx[i] = pi
+
+        if use_palette:
+            out_pal: List[int] = [0, 0, 0] if has_trans else []
+            for r, g, b in color_map:
+                out_pal.extend((r, g, b))
+            img = Image.frombytes("P", (w, h), bytes(out_idx))
+            img.putpalette(out_pal)
+            if has_trans:
+                img.info["transparency"] = 0
+            return img, w, h, reg_x, reg_y
+
         if depth == 1:
             for i, idx in enumerate(indices):
                 o = i * 4
@@ -561,7 +592,10 @@ class DirectorMovie:
                     img, w, h, reg_x, reg_y = decoded
                     os.makedirs(sprites_dir, exist_ok=True)
                     fname = f"c_{cast_id}.png"
-                    img.save(os.path.join(sprites_dir, fname), optimize=False)
+                    save_kwargs: dict = {"optimize": True}
+                    if img.mode == "P" and "transparency" in img.info:
+                        save_kwargs["transparency"] = img.info["transparency"]
+                    img.save(os.path.join(sprites_dir, fname), **save_kwargs)
                     entry["image"] = f"{assets_rel_prefix}/sprites/{fname}"
                     entry["w"] = w
                     entry["h"] = h
@@ -576,13 +610,48 @@ class DirectorMovie:
                     if pcm is not None:
                         sr, samples = pcm
                         os.makedirs(sounds_dir, exist_ok=True)
-                        fname = f"s_{cast_id}.wav"
-                        with wave.open(os.path.join(sounds_dir, fname), "wb") as wf:
-                            wf.setnchannels(1)
-                            wf.setsampwidth(2)
-                            wf.setframerate(sr)
-                            wf.writeframes(samples)
-                        entry["sound"] = f"{assets_rel_prefix}/sounds/{fname}"
+                        mp3_name = f"s_{cast_id}.mp3"
+                        mp3_path = os.path.join(sounds_dir, mp3_name)
+                        encoded = False
+                        try:
+                            res = subprocess.run(
+                                [
+                                    "ffmpeg",
+                                    "-y",
+                                    "-v",
+                                    "error",
+                                    "-f",
+                                    "s16le",
+                                    "-ar",
+                                    str(sr),
+                                    "-ac",
+                                    "1",
+                                    "-i",
+                                    "pipe:0",
+                                    "-c:a",
+                                    "libmp3lame",
+                                    "-q:a",
+                                    "5",
+                                    mp3_path,
+                                ],
+                                input=samples,
+                                capture_output=True,
+                            )
+                            encoded = res.returncode == 0 and os.path.isfile(mp3_path)
+                        except OSError:
+                            encoded = False
+                        if encoded:
+                            entry["sound"] = f"{assets_rel_prefix}/sounds/{mp3_name}"
+                        else:
+                            if os.path.isfile(mp3_path):
+                                os.remove(mp3_path)
+                            wav_name = f"s_{cast_id}.wav"
+                            with wave.open(os.path.join(sounds_dir, wav_name), "wb") as wf:
+                                wf.setnchannels(1)
+                                wf.setsampwidth(2)
+                                wf.setframerate(sr)
+                                wf.writeframes(samples)
+                            entry["sound"] = f"{assets_rel_prefix}/sounds/{wav_name}"
                         sound_count += 1
 
             elif ctype == 2 and cast_id in filmloops:  # FilmLoop

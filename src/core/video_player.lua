@@ -1,4 +1,4 @@
--- Option A video player: streams audio + on-demand JPEG frames in sync.
+-- Video player: streams audio + composites lossless delta-patch PNG frames (or legacy full frames).
 
 local Assets = require("src.core.assets")
 
@@ -19,6 +19,10 @@ function VideoPlayer.new(videoKey, opts)
         totalFrames = meta.frames,
         currentFrameIdx = 0,
         currentImage = nil,
+        canvas = nil,
+        isDelta = false,
+        patches = nil,
+        steps = nil,
         audio = nil,
         audioWasPlaying = false,
         elapsed = 0,
@@ -32,11 +36,23 @@ function VideoPlayer.new(videoKey, opts)
         onFinish = opts.onFinish,
     }, VideoPlayer)
 
-    -- Optional frame index map: logical frame -> unique (deduplicated) frame file
+    -- Optional frame index: v2 delta-patch table or v1 frame map
     if meta.index then
-        local map = Assets.loadLuaTable(meta.index)
-        if type(map) == "table" and #map > 0 then
-            self.frameMap = map
+        local idxData = Assets.loadLuaTable(meta.index)
+        if type(idxData) == "table" then
+            if idxData.version == 2 and type(idxData.patches) == "table" and type(idxData.steps) == "table" then
+                self.isDelta = true
+                self.patches = idxData.patches
+                self.steps = idxData.steps
+                self.canvas = love.graphics.newCanvas(meta.width, meta.height)
+                self.canvas:setFilter(self.filter, self.filter)
+                local prevCanvas = love.graphics.getCanvas()
+                love.graphics.setCanvas(self.canvas)
+                love.graphics.clear(0, 0, 0, 1)
+                love.graphics.setCanvas(prevCanvas)
+            elseif #idxData > 0 then
+                self.frameMap = idxData
+            end
         end
     end
 
@@ -66,6 +82,46 @@ end
 
 function VideoPlayer:loadFrame(idx)
     idx = math.max(1, math.min(self.totalFrames, idx))
+    if self.isDelta then
+        if idx <= self.currentFrameIdx then
+            return
+        end
+        local hasPatch = false
+        for f = self.currentFrameIdx + 1, idx do
+            local pid = self.steps[f]
+            if pid and pid > 0 then
+                hasPatch = true
+                break
+            end
+        end
+        if hasPatch then
+            local prevCanvas = love.graphics.getCanvas()
+            love.graphics.push("all")
+            love.graphics.setCanvas(self.canvas)
+            love.graphics.origin()
+            love.graphics.setScissor()
+            love.graphics.setBlendMode("alpha")
+            love.graphics.setColor(1, 1, 1, 1)
+            for f = self.currentFrameIdx + 1, idx do
+                local pid = self.steps[f]
+                if pid and pid > 0 then
+                    local patch = self.patches[pid]
+                    local path = string.format(self.meta.pattern, pid)
+                    local img = Assets.loadUncachedImage(path, "nearest")
+                    if img and patch then
+                        love.graphics.draw(img, patch[1], patch[2])
+                    end
+                    if img and img.release then
+                        img:release()
+                    end
+                end
+            end
+            love.graphics.pop()
+            love.graphics.setCanvas(prevCanvas)
+        end
+        self.currentFrameIdx = idx
+        return
+    end
     if idx == self.currentFrameIdx and self.currentImage then
         return
     end
@@ -119,11 +175,12 @@ function VideoPlayer:update(dt)
 end
 
 function VideoPlayer:draw()
-    if self.currentImage then
+    local drawable = self.isDelta and self.canvas or self.currentImage
+    if drawable then
         love.graphics.setColor(1, 1, 1, 1)
-        local iw, ih = self.currentImage:getDimensions()
+        local iw, ih = drawable:getDimensions()
         love.graphics.draw(
-            self.currentImage,
+            drawable,
             self.x,
             self.y,
             0,
@@ -169,6 +226,10 @@ function VideoPlayer:stop()
     if self.currentImage and self.currentImage.release then
         self.currentImage:release()
         self.currentImage = nil
+    end
+    if self.canvas and self.canvas.release then
+        self.canvas:release()
+        self.canvas = nil
     end
     self.currentFileIdx = nil
 end

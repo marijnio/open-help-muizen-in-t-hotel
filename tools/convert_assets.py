@@ -46,7 +46,10 @@ def index_source_files(source_dir: Path) -> Dict[str, Path]:
 def convert_bmp(src: Path, dst: Path) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(src) as im:
-        im.convert("RGBA").save(dst, "PNG")
+        if im.mode in ("P", "L", "RGB", "RGBA"):
+            im.save(dst, "PNG", optimize=True)
+        else:
+            im.convert("RGB").save(dst, "PNG", optimize=True)
 
 
 def convert_audio(src: Path, dst: Path) -> None:
@@ -58,12 +61,14 @@ def convert_audio(src: Path, dst: Path) -> None:
         "error",
         "-i",
         str(src),
-        "-acodec",
-        "pcm_s16le",
-        "-ar",
-        "22050",
         "-ac",
         "1",
+        "-ar",
+        "22050",
+        "-c:a",
+        "libmp3lame",
+        "-q:a",
+        "5",
         str(dst),
     ]
     res = subprocess.run(cmd, capture_output=True, text=True)
@@ -107,20 +112,56 @@ def probe_mov(src: Path) -> dict:
     return info
 
 
-def _encode_png(img: Image.Image) -> bytes:
+def _encode_opaque_png(img: Image.Image) -> bytes:
     buf = io.BytesIO()
     img.save(buf, "PNG", optimize=True)
     return buf.getvalue()
+
+
+def _encode_delta_patch(
+    im_p: Image.Image,
+    prev_rgb: Image.Image,
+    cur_rgb: Image.Image,
+    bbox: Tuple[int, int, int, int],
+) -> bytes:
+    crop_p = im_p.crop(bbox)
+    crop_p.info.pop("transparency", None)
+    opaque_data = _encode_opaque_png(crop_p)
+
+    diff_crop = ImageChops.difference(cur_rgb.crop(bbox), prev_rgb.crop(bbox))
+    r, g, b = diff_crop.split()
+    mask = ImageChops.lighter(ImageChops.lighter(r, g), b).point(lambda v: 255 if v else 0)
+
+    hist = crop_p.histogram()
+    used = [i for i, c in enumerate(hist) if c > 0]
+    pal = im_p.getpalette()
+    if len(used) > 255 or not pal:
+        return opaque_data
+
+    lut = [0] * 256
+    out_pal = [0, 0, 0]
+    for new_idx, old_idx in enumerate(used, start=1):
+        lut[old_idx] = new_idx
+        out_pal.extend(pal[old_idx * 3 : old_idx * 3 + 3])
+
+    remapped = crop_p.point(lut)
+    zeros = Image.new("P", crop_p.size, 0)
+    masked = Image.composite(remapped, zeros, mask)
+    masked.putpalette(out_pal)
+
+    buf = io.BytesIO()
+    masked.save(buf, "PNG", transparency=0, optimize=True)
+    masked_data = buf.getvalue()
+    return masked_data if len(masked_data) < len(opaque_data) else opaque_data
 
 
 def convert_video(src: Path, out_dir: Path, rel_dir: str) -> dict:
     """Extract frames as lossless palette PNG *delta patches* plus a frame step index.
 
     The original QuickTime clips are 8-bit palettized (smc/pal8) cel animations: most
-    frames are held or only change a small region. So instead of storing every frame we
-    store, per change, only the bounding rectangle of changed pixels (first frame is a
-    full patch). Identical patches (loops) are stored once. The player composites patches
-    onto a canvas in order. This is lossless and many times smaller than JPEG sequences.
+    frames are held or only change a small region. We store, per change, only the bounding
+    rectangle of changed pixels with unchanged pixels masked transparent (first frame is
+    a full opaque patch). Identical patches are stored once and composited onto a canvas.
     """
     out_dir.mkdir(parents=True, exist_ok=True)
     meta = probe_mov(src)
@@ -146,16 +187,19 @@ def convert_video(src: Path, out_dir: Path, rel_dir: str) -> dict:
         with Image.open(raw) as im:
             im.load()
         raw.unlink()
+        im.info.pop("transparency", None)
         rgb = im.convert("RGB")
         if prev_rgb is None:
             bbox = (0, 0, im.width, im.height)
+            data = _encode_opaque_png(im)
         else:
             bbox = ImageChops.difference(rgb, prev_rgb).getbbox()
+            if not bbox:
+                prev_rgb = rgb
+                steps.append(0)
+                continue
+            data = _encode_delta_patch(im, prev_rgb, rgb, bbox)
         prev_rgb = rgb
-        if not bbox:
-            steps.append(0)
-            continue
-        data = _encode_png(im.crop(bbox))
         key = (bbox[0], bbox[1], hashlib.sha1(data).hexdigest())
         pid = patch_ids.get(key)
         if pid is None:
@@ -389,6 +433,7 @@ def main() -> int:
             "super/sounds/": "super_sounds",
         }
         if not args.only_dxr:
+            audio_hashes: Dict[str, str] = {}
             for rel, path in sorted(files.items()):
                 if rel.startswith(("music8/", "solos8/")):
                     continue
@@ -404,9 +449,14 @@ def main() -> int:
                 if group is None:
                     continue
                 key = register_key(f"audio.{group}", normalize_key(path.name), path)
-                out_rel = f"audio/{group}/{key}.wav"
-                manifest["audio"].setdefault(group, {})[key] = out_rel
-                tasks.append(pool.submit(convert_audio, path, out_root / out_rel))
+                digest = hashlib.sha1(path.read_bytes()).hexdigest()
+                if digest in audio_hashes:
+                    manifest["audio"].setdefault(group, {})[key] = audio_hashes[digest]
+                else:
+                    out_rel = f"audio/{group}/{key}.mp3"
+                    audio_hashes[digest] = out_rel
+                    manifest["audio"].setdefault(group, {})[key] = out_rel
+                    tasks.append(pool.submit(convert_audio, path, out_root / out_rel))
 
         # 3. Videos (.mov)
         video_futures = {}

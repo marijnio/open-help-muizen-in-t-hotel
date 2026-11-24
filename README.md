@@ -61,11 +61,11 @@ python3 tools/convert_assets.py --source backup/extracted --output assets
 ### Options
 
 * `--source <dir>`: Path to the extracted original game files (case-insensitive lookup; default: `backup/extracted`).
-* `--output <dir>`: Destination directory for converted `.png`, `.wav`, video frame sequences, `dxr/*/score.lua`, and `manifest.lua` (default: `assets`).
+* `--output <dir>`: Destination directory for converted palette `.png` images/sprites, `.mp3` audio, video delta patches, `dxr/*/score.lua`, and `manifest.lua` (default: `assets`).
 * `--workers <n>`: Number of parallel conversion threads (default: CPU count).
 * `--skip-videos`: Skip `.MOV` frame/audio extraction for quick testing.
 
-Videos are stored losslessly and compactly: the original QuickTime clips are 8-bit palettized cel animations, so each clip is exported as palette PNG *delta patches* (only the changed rectangle per frame, identical patches stored once) plus a `frames.lua` step index; [src/core/video_player.lua](src/core/video_player.lua) composites the patches onto a canvas during playback.
+Videos are stored losslessly and compactly: the original QuickTime clips are 8-bit palettized cel animations, so each clip is exported as palette PNG *delta patches* (only the changed bounding rectangle per frame with unchanged pixels masked transparent, and identical patches stored once) plus a `frames.lua` step index; [src/core/video_player.lua](src/core/video_player.lua) composites the patches onto a canvas during playback. Audio tracks and embedded sounds are encoded to mono 22050 Hz `.mp3` with identical source files deduplicated.
 
 ### Asset Search Order
 

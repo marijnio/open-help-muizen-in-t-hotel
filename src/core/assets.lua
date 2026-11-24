@@ -246,6 +246,9 @@ function Assets.getAudioSource(relPath, sourceType)
         return Assets.sounds[cacheKey]
     end
     local fd = readFileData(relPath)
+    if not fd and relPath:match("%.wav$") then
+        fd = readFileData((relPath:gsub("%.wav$", ".mp3")))
+    end
     if not fd then
         logMissingOnce("audio:" .. relPath)
         return nil
