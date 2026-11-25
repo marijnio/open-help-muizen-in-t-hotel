@@ -144,13 +144,13 @@ The engine is configured in [conf.lua](conf.lua) and [main.lua](main.lua) for An
 Package with [scripts/build_android.sh](scripts/build_android.sh):
 
 ```bash
-# 1. Build a self-contained .love archive (includes local assets/)
+# 1. Build a directly installable signed debug APK (auto-detects ./love-android or ../love-android, or set LOVE_ANDROID_DIR)
+#    -> dist/help-muizen-hotel-debug.apk (pass --release for a release build, or --love-only for .love only)
 ./scripts/build_android.sh
 
-# 2. Or build a lightweight .love without copyrighted assets and push assets/ via adb
+# 2. Or build a lightweight APK without copyrighted assets and push assets/ via adb
 ./scripts/build_android.sh --no-assets --push-assets
 
-# 3. Build an APK using a local love-android checkout -> dist/help-muizen-hotel.apk (or -debug.apk)
-#    (sets app title "Help! Muizen in 't hotel", adaptive + legacy launcher icons, and sensorLandscape)
-LOVE_ANDROID_DIR=/path/to/love-android ./scripts/build_android.sh --build-apk
+# 3. Or build only a .love archive without building an APK
+./scripts/build_android.sh --love-only
 ```

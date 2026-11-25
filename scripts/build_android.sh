@@ -4,11 +4,20 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="${ROOT_DIR}/dist"
 NO_ASSETS=0
-BUILD_APK=0
-DEBUG_APK=0
+BUILD_APK=1
+DEBUG_APK=1
 PUSH_ASSETS=0
 PACKAGE_NAME="org.love2d.android"
-LOVE_ANDROID_DIR="${LOVE_ANDROID_DIR:-${ROOT_DIR}/love-android}"
+LOVE_ANDROID_DIR_FROM_ENV=0
+if [[ -n "${LOVE_ANDROID_DIR:-}" ]]; then
+    LOVE_ANDROID_DIR_FROM_ENV=1
+elif [[ -d "${ROOT_DIR}/love-android" ]]; then
+    LOVE_ANDROID_DIR="${ROOT_DIR}/love-android"
+elif [[ -d "${ROOT_DIR}/../love-android" ]]; then
+    LOVE_ANDROID_DIR="$(cd "${ROOT_DIR}/../love-android" && pwd)"
+else
+    LOVE_ANDROID_DIR="${ROOT_DIR}/love-android"
+fi
 ICON_SOURCE=""
 APP_NAME="Help! Muizen in 't hotel"
 
@@ -16,14 +25,16 @@ usage() {
     cat <<'EOF'
 Usage: scripts/build_android.sh [options]
 
-Packages Help! Muizen in 't hotel as a .love archive and optionally builds an
-Android APK using love-android or pushes side-loaded assets via adb.
+Packages Help! Muizen in 't hotel as a .love archive and builds an Android APK
+using love-android by default (or pushes side-loaded assets via adb).
 
 Options:
-  --no-assets        Build a lightweight .love without assets/ (for side-loading)
-  --output <dir>     Output directory for .love / .apk (default: dist)
-  --build-apk        Build APK via love-android (uses $LOVE_ANDROID_DIR or ./love-android)
-  --debug            Build debug APK instead of release when --build-apk is set
+  --no-assets        Build without bundling assets/ (for side-loading)
+  --output <dir>     Output directory for .apk / .love (default: dist)
+  --build-apk        Build APK via love-android (default; uses $LOVE_ANDROID_DIR, ./love-android, or ../love-android)
+  --love-only        Only build the .love archive and skip building the APK
+  --debug            Build signed debug APK (default; directly installable on Android)
+  --release          Build release APK (requires signing config to install on Android)
   --icon <path>      Optional source image for Android launcher icons
   --app-name <title> Android app title (default: "Help! Muizen in 't hotel")
   --push-assets      Push local assets/ to Android external save dir via adb
@@ -46,8 +57,16 @@ while [[ $# -gt 0 ]]; do
             BUILD_APK=1
             shift
             ;;
+        --love-only)
+            BUILD_APK=0
+            shift
+            ;;
         --debug)
             DEBUG_APK=1
+            shift
+            ;;
+        --release)
+            DEBUG_APK=0
             shift
             ;;
         --icon)
@@ -77,6 +96,16 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [[ "${BUILD_APK}" -eq 1 && ! -d "${LOVE_ANDROID_DIR}" ]]; then
+    if [[ "${LOVE_ANDROID_DIR_FROM_ENV}" -eq 1 ]]; then
+        echo "Error: love-android directory not found at ${LOVE_ANDROID_DIR}." >&2
+    else
+        echo "Error: love-android directory not found (checked ${ROOT_DIR}/love-android and ${ROOT_DIR}/../love-android)." >&2
+    fi
+    echo "Clone love-android, set LOVE_ANDROID_DIR=/path/to/love-android, or pass --love-only." >&2
+    exit 1
+fi
 
 mkdir -p "${OUT_DIR}"
 OUT_DIR="$(cd "${OUT_DIR}" && pwd)"
@@ -137,12 +166,6 @@ if [[ "${PUSH_ASSETS}" -eq 1 ]]; then
 fi
 
 if [[ "${BUILD_APK}" -eq 1 ]]; then
-    if [[ ! -d "${LOVE_ANDROID_DIR}" ]]; then
-        echo "Error: love-android directory not found at ${LOVE_ANDROID_DIR}." >&2
-        echo "Clone love-android or set LOVE_ANDROID_DIR=/path/to/love-android." >&2
-        exit 1
-    fi
-
     EMBED_ASSETS_DIR="${LOVE_ANDROID_DIR}/app/src/embed/assets"
     mkdir -p "${EMBED_ASSETS_DIR}"
     cp "${LOVE_PATH}" "${EMBED_ASSETS_DIR}/game.love"
@@ -326,6 +349,9 @@ PY
         APK_DEST="${OUT_DIR}/${APK_NAME}"
         cp "${FOUND_APK}" "${APK_DEST}"
         echo "APK ready: ${APK_DEST}"
+        if [[ "${APK_NAME}" == *-unsigned.apk ]]; then
+            echo "Warning: ${APK_NAME} is unsigned and cannot be installed on Android until signed (or rebuild with --debug)." >&2
+        fi
     else
         echo "Warning: Gradle finished, but no APK was found under ${APK_OUTPUTS_DIR}." >&2
     fi
