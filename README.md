@@ -124,7 +124,7 @@ Progress is stored in `savegame.lua` inside LÖVE's save directory via automatic
 * **Milestone 5 (Implemented):**
   * **Het Muizendoolhof** (`src/states/doolhof.lua`): randomized 4-quadrant 25×25 maze (`DOOLHOF.EXE` assets) with BFS connectivity guarantee, 10 mice, 3 corner cheeses, porters/cats/guest enemies, commotion animations, keyboard/D-pad/swipe controls, and game-over summary
   * **Super Spel** (`src/states/super_hub.lua`, `src/states/super_room.lua`, `src/core/super_scores.lua`): fast arcade hotel mode across all 19 `SUPER/*.DXR` rooms with auto-animating hiding spots, premature-click penalties, shader-tinted blue decoy mice, room-to-room escape chases, and persistent Top 5 High Scores (`superscores.lua`)
-  * **Android Packaging** (`scripts/build_android.sh`, `scripts/generate_android_icons.py`): `.love` / `--no-assets` bundler, `adb` side-loading helper, mipmap launcher icon generator, and `love-android` APK builder with `sensorLandscape` orientation lock
+  * **Android Packaging** (`scripts/build_android.sh`, `scripts/generate_android_icons.py`): `.love` / `--no-assets` bundler, `adb` side-loading helper, legacy + API 26 adaptive launcher icon generator, and `love-android` APK builder producing `dist/help-muizen-hotel*.apk` with app title, icon, and `sensorLandscape` orientation lock
 
 ---
 
@@ -148,6 +148,7 @@ Package with [scripts/build_android.sh](scripts/build_android.sh):
 # 2. Or build a lightweight .love without copyrighted assets and push assets/ via adb
 ./scripts/build_android.sh --no-assets --push-assets
 
-# 3. Build an APK using a local love-android checkout (sets sensorLandscape + launcher icons)
+# 3. Build an APK using a local love-android checkout -> dist/help-muizen-hotel.apk (or -debug.apk)
+#    (sets app title "Help! Muizen in 't hotel", adaptive + legacy launcher icons, and sensorLandscape)
 LOVE_ANDROID_DIR=/path/to/love-android ./scripts/build_android.sh --build-apk
 ```

@@ -10,6 +10,7 @@ PUSH_ASSETS=0
 PACKAGE_NAME="org.love2d.android"
 LOVE_ANDROID_DIR="${LOVE_ANDROID_DIR:-${ROOT_DIR}/love-android}"
 ICON_SOURCE=""
+APP_NAME="Help! Muizen in 't hotel"
 
 usage() {
     cat <<'EOF'
@@ -24,6 +25,7 @@ Options:
   --build-apk        Build APK via love-android (uses $LOVE_ANDROID_DIR or ./love-android)
   --debug            Build debug APK instead of release when --build-apk is set
   --icon <path>      Optional source image for Android launcher icons
+  --app-name <title> Android app title (default: "Help! Muizen in 't hotel")
   --push-assets      Push local assets/ to Android external save dir via adb
   --package <id>     Android applicationId for --push-assets (default: org.love2d.android)
   -h, --help         Show this help message
@@ -50,6 +52,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --icon)
             ICON_SOURCE="$2"
+            shift 2
+            ;;
+        --app-name)
+            APP_NAME="$2"
             shift 2
             ;;
         --push-assets)
@@ -146,32 +152,136 @@ if [[ "${BUILD_APK}" -eq 1 ]]; then
     ICON_ARGS=(--output "${RES_DIR}")
     if [[ -n "${ICON_SOURCE}" ]]; then
         ICON_ARGS+=(--source "${ICON_SOURCE}")
-    elif [[ "${NO_ASSETS}" -eq 0 && -f "${ROOT_DIR}/assets/images/bmp/muizen.png" ]]; then
-        ICON_ARGS+=(--source "${ROOT_DIR}/assets/images/bmp/muizen.png")
+    elif [[ "${NO_ASSETS}" -eq 0 && -f "${ROOT_DIR}/assets/dxr/instrum/sprites/c_10.png" ]]; then
+        ICON_ARGS+=(--source "${ROOT_DIR}/assets/dxr/instrum/sprites/c_10.png")
     fi
     python3 "${ROOT_DIR}/scripts/generate_android_icons.py" "${ICON_ARGS[@]}"
 
-    MANIFEST_FILE="${LOVE_ANDROID_DIR}/app/src/main/AndroidManifest.xml"
-    if [[ -f "${MANIFEST_FILE}" ]]; then
-        python3 - "${MANIFEST_FILE}" <<'PY'
-import re, sys
+    # Update Android app_name string resource (properly escaped for aapt2) and manifest metadata
+    python3 - "${LOVE_ANDROID_DIR}" "${APP_NAME}" <<'PY'
+import re
+import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
-p = Path(sys.argv[1])
-txt = p.read_text(encoding="utf-8")
-if 'android:screenOrientation=' in txt:
-    new_txt = re.sub(r'android:screenOrientation="[^"]+"', 'android:screenOrientation="sensorLandscape"', txt, count=1)
-else:
-    new_txt = txt.replace('<activity ', '<activity android:screenOrientation="sensorLandscape" ', 1)
-if new_txt != txt:
-    p.write_text(new_txt, encoding="utf-8")
-    print(f"Updated screenOrientation=sensorLandscape in {p}")
+love_dir = Path(sys.argv[1])
+app_name = sys.argv[2]
+
+
+def escape_android_string(text: str) -> str:
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', '\\"')
+        .replace("'", "\\'")
+    )
+
+
+escaped_name = escape_android_string(app_name)
+
+
+def update_strings_file(path: Path, create_if_missing: bool) -> None:
+    if not path.is_file():
+        if not create_if_missing:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        content = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            "<resources>\n"
+            f'    <string name="app_name">{escaped_name}</string>\n'
+            "</resources>\n"
+        )
+        path.write_text(content, encoding="utf-8")
+        ET.fromstring(content)
+        print(f"Created {path} with app_name={app_name!r}")
+        return
+
+    txt = path.read_text(encoding="utf-8")
+    pattern = re.compile(r'(<string\b[^>]*\bname="app_name"[^>]*>)(.*?)(</string>)', re.DOTALL)
+    if pattern.search(txt):
+        new_txt = pattern.sub(lambda m: f"{m.group(1)}{escaped_name}{m.group(3)}", txt, count=1)
+    elif create_if_missing and "</resources>" in txt:
+        new_txt = txt.replace(
+            "</resources>",
+            f'    <string name="app_name">{escaped_name}</string>\n</resources>',
+            1,
+        )
+    else:
+        return
+
+    if new_txt != txt:
+        ET.fromstring(new_txt)
+        path.write_text(new_txt, encoding="utf-8")
+        print(f"Updated app_name={app_name!r} in {path}")
+
+
+main_strings = love_dir / "app" / "src" / "main" / "res" / "values" / "strings.xml"
+update_strings_file(main_strings, create_if_missing=True)
+
+for flavor_strings in sorted((love_dir / "app" / "src").glob("embed*/res/values*/strings.xml")):
+    update_strings_file(flavor_strings, create_if_missing=False)
+
+
+def set_xml_attr(tag_text: str, attr: str, value: str) -> str:
+    attr_re = re.compile(rf'(\s+{re.escape(attr)}\s*=\s*")([^"]*)(")')
+    if attr_re.search(tag_text):
+        return attr_re.sub(rf"\g<1>{value}\g<3>", tag_text, count=1)
+    if tag_text.endswith("/>"):
+        return f'{tag_text[:-2]} {attr}="{value}"/>'
+    return f'{tag_text[:-1]} {attr}="{value}">'
+
+
+def patch_manifest(manifest_path: Path, is_main: bool) -> None:
+    if not manifest_path.is_file():
+        return
+    txt = manifest_path.read_text(encoding="utf-8")
+    new_txt = txt
+
+    app_re = re.compile(r"<application\b[^>]*>", re.DOTALL)
+    app_match = app_re.search(new_txt)
+    if app_match:
+        app_tag = app_match.group(0)
+        app_tag = set_xml_attr(app_tag, "android:label", "@string/app_name")
+        app_tag = set_xml_attr(app_tag, "android:icon", "@mipmap/ic_launcher")
+        app_tag = set_xml_attr(app_tag, "android:roundIcon", "@mipmap/ic_launcher_round")
+        new_txt = new_txt[: app_match.start()] + app_tag + new_txt[app_match.end() :]
+
+    if is_main:
+        act_re = re.compile(r"<activity\b[^>]*>", re.DOTALL)
+        matches = list(act_re.finditer(new_txt))
+        target_match = None
+        for m in matches:
+            if re.search(r'android:name\s*=\s*"[^"]*GameActivity"', m.group(0)):
+                target_match = m
+                break
+        if target_match is None and matches:
+            target_match = matches[0]
+
+        if target_match is not None:
+            act_tag = target_match.group(0)
+            act_tag = set_xml_attr(act_tag, "android:screenOrientation", "sensorLandscape")
+            if re.search(r'\bandroid:label\s*=\s*"[^"]*"', act_tag):
+                act_tag = set_xml_attr(act_tag, "android:label", "@string/app_name")
+            if re.search(r'\bandroid:icon\s*=\s*"[^"]*"', act_tag):
+                act_tag = set_xml_attr(act_tag, "android:icon", "@mipmap/ic_launcher")
+            new_txt = new_txt[: target_match.start()] + act_tag + new_txt[target_match.end() :]
+
+    if new_txt != txt:
+        ET.fromstring(new_txt)
+        manifest_path.write_text(new_txt, encoding="utf-8")
+        print(f"Updated AndroidManifest metadata in {manifest_path}")
+
+
+patch_manifest(love_dir / "app" / "src" / "main" / "AndroidManifest.xml", is_main=True)
+patch_manifest(love_dir / "app" / "src" / "embed" / "AndroidManifest.xml", is_main=False)
 PY
-    fi
 
     GRADLE_TASK="assembleEmbedNoRecordRelease"
+    APK_VARIANT_DIR="embedNoRecord/release"
     if [[ "${DEBUG_APK}" -eq 1 ]]; then
         GRADLE_TASK="assembleEmbedNoRecordDebug"
+        APK_VARIANT_DIR="embedNoRecord/debug"
     fi
     echo "Running Gradle task ${GRADLE_TASK} in ${LOVE_ANDROID_DIR}..."
     (
@@ -179,12 +289,44 @@ PY
         ./gradlew "${GRADLE_TASK}"
     )
 
-    FOUND_APK="$(find "${LOVE_ANDROID_DIR}/app/build/outputs/apk" -name "*.apk" | head -n 1 || true)"
+    APK_OUTPUTS_DIR="${LOVE_ANDROID_DIR}/app/build/outputs/apk"
+    FOUND_APK="$(python3 - "${APK_OUTPUTS_DIR}" "${APK_VARIANT_DIR}" <<'PY'
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+variant_dir = root / sys.argv[2]
+
+def newest_apk(search_dir: Path):
+    if not search_dir.is_dir():
+        return None
+    apks = sorted(search_dir.rglob("*.apk"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return str(apks[0]) if apks else None
+
+found = newest_apk(variant_dir) or newest_apk(root)
+if found:
+    print(found)
+PY
+)"
     if [[ -n "${FOUND_APK}" ]]; then
-        APK_DEST="${OUT_DIR}/$(basename "${FOUND_APK}")"
+        BASE_NAME="help-muizen-hotel"
+        if [[ "${NO_ASSETS}" -eq 1 ]]; then
+            BASE_NAME="help-muizen-hotel-no-assets"
+        fi
+
+        FOUND_BASENAME="$(basename "${FOUND_APK}")"
+        if [[ "${DEBUG_APK}" -eq 1 ]]; then
+            APK_NAME="${BASE_NAME}-debug.apk"
+        elif [[ "${FOUND_BASENAME}" == *-unsigned.apk ]]; then
+            APK_NAME="${BASE_NAME}-unsigned.apk"
+        else
+            APK_NAME="${BASE_NAME}.apk"
+        fi
+
+        APK_DEST="${OUT_DIR}/${APK_NAME}"
         cp "${FOUND_APK}" "${APK_DEST}"
         echo "APK ready: ${APK_DEST}"
     else
-        echo "Warning: Gradle finished, but no APK was found under app/build/outputs/apk." >&2
+        echo "Warning: Gradle finished, but no APK was found under ${APK_OUTPUTS_DIR}." >&2
     fi
 fi
