@@ -13,6 +13,7 @@ local Rooms = require("src.data.rooms")
 local Room = {}
 
 local DIFFICULTY_FPS = { [1] = 8, [2] = 12, [3] = 16 }
+local AUTO_RUN_DELAY_BY_DIFFICULTY = { [1] = 20, [2] = 30, [3] = nil }
 local MOUSE_CATCH_LOCK_SECONDS = 0.40
 local MOUSE_CATCH_LOCK_MIN_SECONDS = 0.15
 local MOUSE_CATCH_LOCK_MAX_FRACTION = 0.40
@@ -29,6 +30,11 @@ local function computeCatchLockDuration(span)
     local spanFrames = math.max(1, (span.endFrame - span.startFrame) + 1)
     local capped = math.max(MOUSE_CATCH_LOCK_MIN_SECONDS, (spanFrames / baseFps) * MOUSE_CATCH_LOCK_MAX_FRACTION)
     return math.min(MOUSE_CATCH_LOCK_SECONDS, capped)
+end
+
+local function getAutoRunDelay()
+    local diff = (App.session and App.session.difficulty) or 1
+    return AUTO_RUN_DELAY_BY_DIFFICULTY[diff]
 end
 
 local function pointInRect(px, py, r)
@@ -73,6 +79,7 @@ function Room:enter(params)
     self.animFrameFloat = 1
     self.animDestSpot = nil
     self.mouseCatchLockTimer = 0
+    self.mouseIdleTimer = 0
     self.catchAnim = nil
     self.caughtPlayer = nil
     self.toast = nil
@@ -237,20 +244,32 @@ function Room:canCatchMouse()
     return self.mode == "mouse_run" and (self.mouseCatchLockTimer or 0) <= 0
 end
 
+function Room:startMouseRun(fromSpot, isAuto)
+    local dest, span = self:findMouseRunSpan(fromSpot)
+    if not span then
+        return false
+    end
+    if isAuto then
+        self.traps.menuOpen = false
+        self:playSpotSound(fromSpot)
+    end
+    AudioQueue.playSfx("dxr/shared/sounds/s_821.wav", 0.7)
+    self.mode = "mouse_run"
+    self.animSpan = span
+    self.animFrameFloat = span.startFrame
+    self.animDestSpot = dest
+    self.mouseCatchLockTimer = computeCatchLockDuration(span)
+    self.mouseIdleTimer = 0
+    Cursor.setSystem("arrow")
+    return true
+end
+
 function Room:triggerSpot(spotId)
     self.traps.menuOpen = false
     self:playSpotSound(spotId)
 
     if self.hasMouse and spotId == self.mouseSpot then
-        local dest, span = self:findMouseRunSpan(spotId)
-        if span then
-            AudioQueue.playSfx("dxr/shared/sounds/s_821.wav", 0.7)
-            self.mode = "mouse_run"
-            self.animSpan = span
-            self.animFrameFloat = span.startFrame
-            self.animDestSpot = dest
-            self.mouseCatchLockTimer = computeCatchLockDuration(span)
-            Cursor.setSystem("arrow")
+        if self:startMouseRun(spotId, false) then
             return
         end
     end
@@ -313,6 +332,7 @@ function Room:catchMouse(catchX, catchY)
     self.hasMouse = false
     self.mouseSpot = nil
     self.mouseCatchLockTimer = 0
+    self.mouseIdleTimer = 0
     Rooms.markRoomCaught(App.session, self.room.id)
     App.session.pendingInstrumentRoom = self.room.title
     if App.saveProgress then
@@ -457,7 +477,17 @@ function Room:update(dt)
         end
     end
 
+    local autoRunDelay = (self.hasMouse and self.mouseSpot) and getAutoRunDelay() or nil
+    if autoRunDelay and (self.mode == "idle" or self.mode == "anim_empty") then
+        self.mouseIdleTimer = self.mouseIdleTimer + dt
+    end
+
     if self.mode == "idle" then
+        if autoRunDelay and not self.traps.menuOpen and self.mouseIdleTimer >= autoRunDelay then
+            if not self:startMouseRun(self.mouseSpot, true) then
+                self.mouseIdleTimer = 0
+            end
+        end
         return
     end
 
@@ -490,17 +520,21 @@ function Room:update(dt)
 
     self.animFrameFloat = self.animFrameFloat + dt * playFps
     if self.animFrameFloat > self.animSpan.endFrame + 0.99 then
-        if self.mode == "mouse_run" then
+        local finishedMode = self.mode
+        if finishedMode == "mouse_run" then
             AudioQueue.playSfx("dxr/shared/sounds/s_822.wav", 0.65)
             self.mouseSpot = self.animDestSpot or self.mouseSpot
             if self.traps.active and self.traps.active.sprung then
                 self.traps.active = nil
             end
-            self:showToast("Mis! De muis heeft zich weer verstopt!")
+            self.mouseIdleTimer = 0
         end
         self.mode = "idle"
         self.animSpan = nil
         self.mouseCatchLockTimer = 0
+        if finishedMode == "mouse_run" and not App.isTouchMode and App.lastVx and App.lastVy then
+            self:mousemoved(App.lastVx, App.lastVy)
+        end
     end
 end
 
@@ -721,7 +755,11 @@ function Room:draw(vx, vy)
         end
         if self.hasMouse then
             love.graphics.setColor(0.2, 1, 0.4, 1)
-            love.graphics.print("mouseSpot=" .. tostring(self.mouseSpot) .. "  [C = auto-catch]", 10, 24)
+            local autoRunDelay = getAutoRunDelay()
+            local autoText = autoRunDelay
+                and string.format("  autoRun=%.1fs", math.max(0, autoRunDelay - (self.mouseIdleTimer or 0)))
+                or "  autoRun=off"
+            love.graphics.print("mouseSpot=" .. tostring(self.mouseSpot) .. autoText .. "  [C = auto-catch]", 10, 24)
         end
     end
 
