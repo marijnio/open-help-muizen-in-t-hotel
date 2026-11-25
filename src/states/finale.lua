@@ -12,6 +12,7 @@ function Finale:enter()
     Cursor.reset()
     AudioQueue.stopAll()
     App.inActiveSession = false
+    Save.markMainGameCompleted()
     Save.delete()
     self.player = VideoPlayer.new("endseq", {
         onFinish = function()

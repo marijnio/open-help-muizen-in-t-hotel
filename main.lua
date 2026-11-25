@@ -8,15 +8,8 @@ local Save = require("src.core.save")
 local SceneManager = require("src.core.scene_manager")
 local Rooms = require("src.data.rooms")
 
-App = {
-    debugMode = false,
-    isTouchMode = false,
-    inActiveSession = false,
-    focused = true,
-    activeTouchId = nil,
-    lastVx = 320,
-    lastVy = 240,
-    session = {
+local function makeDefaultSession()
+    return {
         difficulty = 1,
         musicEnabled = true,
         trapsLeft = 10,
@@ -30,7 +23,18 @@ App = {
         lastInstrument = nil,
         pendingInstrumentRoom = nil,
         buildIndex = 1,
-    },
+    }
+end
+
+App = {
+    debugMode = false,
+    isTouchMode = false,
+    inActiveSession = false,
+    focused = true,
+    activeTouchId = nil,
+    lastVx = 320,
+    lastVy = 240,
+    session = makeDefaultSession(),
     states = {},
 }
 
@@ -47,6 +51,13 @@ function App.saveProgress()
         return false
     end
     return Save.write(App.session)
+end
+
+function App.clearAllProgress()
+    Save.clearAll()
+    App.inActiveSession = false
+    App.session = makeDefaultSession()
+    App.superSession = nil
 end
 
 function App.reloadAssets()

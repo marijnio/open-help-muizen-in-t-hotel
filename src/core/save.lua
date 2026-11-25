@@ -1,8 +1,12 @@
 -- Save / load game progress via love.filesystem.
 
+local SuperScores = require("src.core.super_scores")
+
 local Save = {
     FILENAME = "savegame.lua",
     VERSION = 1,
+    PROGRESS_FILENAME = "progress.lua",
+    PROGRESS_VERSION = 1,
 }
 
 local function serializeValue(v, indent)
@@ -177,6 +181,67 @@ function Save.delete()
     if Save.exists() then
         love.filesystem.remove(Save.FILENAME)
     end
+end
+
+function Save.loadProgress()
+    local fallback = {
+        version = Save.PROGRESS_VERSION,
+        completedMainGame = false,
+        completedAt = nil,
+    }
+    if love.filesystem.getInfo(Save.PROGRESS_FILENAME) == nil then
+        return fallback
+    end
+    local chunk, err = love.filesystem.load(Save.PROGRESS_FILENAME)
+    if not chunk then
+        print("[Save] Failed to load progress: " .. tostring(err))
+        return fallback
+    end
+    local ok, data = pcall(chunk)
+    if not ok or type(data) ~= "table" then
+        return fallback
+    end
+    return {
+        version = tonumber(data.version) or Save.PROGRESS_VERSION,
+        completedMainGame = (data.completedMainGame == true),
+        completedAt = tonumber(data.completedAt),
+    }
+end
+
+function Save.isMainGameCompleted()
+    return Save.loadProgress().completedMainGame == true
+end
+
+function Save.markMainGameCompleted()
+    local payload = {
+        version = Save.PROGRESS_VERSION,
+        completedMainGame = true,
+        completedAt = os.time(),
+    }
+    local content = "return " .. serializeValue(payload, 0) .. "\n"
+    local ok, err = love.filesystem.write(Save.PROGRESS_FILENAME, content)
+    if not ok then
+        print("[Save] Failed to write progress: " .. tostring(err))
+    end
+    return ok
+end
+
+function Save.deleteProgress()
+    if love.filesystem.getInfo(Save.PROGRESS_FILENAME) ~= nil then
+        love.filesystem.remove(Save.PROGRESS_FILENAME)
+    end
+end
+
+function Save.hasAnyData()
+    return Save.exists()
+        or (love.filesystem.getInfo(Save.PROGRESS_FILENAME) ~= nil)
+        or SuperScores.exists()
+end
+
+function Save.clearAll()
+    Save.delete()
+    Save.deleteProgress()
+    SuperScores.delete()
 end
 
 return Save

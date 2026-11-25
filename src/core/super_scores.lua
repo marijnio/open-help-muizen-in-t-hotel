@@ -41,6 +41,16 @@ local function serializeList(list)
     return table.concat(parts)
 end
 
+function SuperScores.exists()
+    return love.filesystem.getInfo(SuperScores.FILENAME) ~= nil
+end
+
+function SuperScores.delete()
+    if SuperScores.exists() then
+        love.filesystem.remove(SuperScores.FILENAME)
+    end
+end
+
 function SuperScores.load()
     if not love.filesystem.getInfo(SuperScores.FILENAME) then
         return {}

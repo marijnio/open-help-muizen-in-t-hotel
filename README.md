@@ -102,7 +102,7 @@ love .
 
 ### Save & Resume
 
-Progress is stored in `savegame.lua` inside LÖVE's save directory via automatic checkpoints (after catching a mouse, matching an instrument, or placing a mousetrap), on window focus loss/quit, and via the **Opslaan** button when exiting the Hotel Hub. Completed sessions clean up `savegame.lua` upon reaching the finale.
+Progress is stored in `savegame.lua` inside LÖVE's save directory via automatic checkpoints (after catching a mouse, matching an instrument, or placing a mousetrap), on window focus loss/quit, and via the **Opslaan** button when exiting the Hotel Hub. Completed sessions clean up `savegame.lua` upon reaching the finale and record completion in `progress.lua` to unlock the bonus minigames. All saved games, completion progress, and Super Spel high scores can be cleared from the Launcher via **Gegevens wissen**.
 
 ---
 
@@ -129,6 +129,8 @@ Progress is stored in `savegame.lua` inside LÖVE's save directory via automatic
 ---
 
 ## Bonus Modes
+
+Both bonus modes unlock once you have completed the main game at least once (persisted in `progress.lua`).
 
 * **Het Muizendoolhof:** Guide 10 green mice from the hole at top-left to any of the 3 corner cheeses and safely back while dodging porters, cats, and an angry guest. Steer with **Arrow keys / WASD**, the on-screen **D-pad**, or **touch/mouse swipes** (`P` pauses, `Esc` quits).
 * **Super Spel:** Scan the hotel cross-section with the Mouse-Detector TV to find the active room. Inside, hiding places animate automatically—**do not click until a mouse runs out!** Catch green mice for `300 / 200 / 100 / 50` points (decreasing if the mouse escapes to neighboring rooms), ignore blue decoy mice (`-100`), and aim for the Top 5 High Scores board.
