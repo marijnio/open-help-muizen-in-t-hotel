@@ -61,10 +61,11 @@ end
 local function readFileData(relPath)
     if Assets.baseMode == "fs" then
         local full = Assets.basePath .. "/" .. relPath
-        if not love.filesystem.getInfo(full) then
+        local ok, fd = pcall(love.filesystem.newFileData, full)
+        if not ok then
             return nil
         end
-        return love.filesystem.newFileData(full)
+        return fd
     elseif Assets.baseMode == "io" then
         local full = Assets.basePath .. "/" .. relPath
         local f = io.open(full, "rb")
@@ -76,6 +77,13 @@ local function readFileData(relPath)
         return love.filesystem.newFileData(bytes, relPath)
     end
     return nil
+end
+
+function Assets.resolvePath(relPath)
+    if not relPath or not Assets.baseMode or not Assets.basePath then
+        return nil, nil
+    end
+    return Assets.basePath .. "/" .. relPath, Assets.baseMode
 end
 
 function Assets.clearCache()

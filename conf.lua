@@ -49,5 +49,5 @@ function love.conf(t)
     t.modules.window = true
     t.modules.physics = false
     t.modules.joystick = false
-    t.modules.thread = false
+    t.modules.thread = true
 end

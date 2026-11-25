@@ -123,29 +123,63 @@ fi
 LOVE_PATH="${OUT_DIR}/${LOVE_NAME}"
 rm -f "${LOVE_PATH}"
 
-ZIP_ARGS=(
-    -r -9 "${LOVE_PATH}"
-    main.lua conf.lua src
-)
-if [[ "${NO_ASSETS}" -eq 0 ]]; then
-    ZIP_ARGS+=(assets)
-fi
+python3 - "${ROOT_DIR}" "${LOVE_PATH}" "${NO_ASSETS}" <<'PY'
+import fnmatch
+import os
+import sys
+import zipfile
+from pathlib import Path
 
-(
-    cd "${ROOT_DIR}"
-    zip "${ZIP_ARGS[@]}" -x \
-        "*.DS_Store" \
-        "*/__pycache__/*" \
-        "*.pyc" \
-        "local_config.lua" \
-        "backup/*" \
-        "tools/*" \
-        "scripts/*" \
-        "dist/*" \
-        "build/*" \
-        "love-android/*" \
-        ".git/*" >/dev/null
-)
+root_dir = Path(sys.argv[1])
+love_path = Path(sys.argv[2])
+no_assets = int(sys.argv[3])
+
+roots = ["main.lua", "conf.lua", "src"]
+if no_assets == 0:
+    roots.append("assets")
+
+store_exts = {".png", ".mp3", ".ogg", ".jpg", ".jpeg", ".webp"}
+exclude_roots = {"local_config.lua", "backup", "tools", "scripts", "dist", "build", "love-android", ".git"}
+
+def is_excluded(rel_posix: str) -> bool:
+    parts = rel_posix.split("/")
+    if parts[0] in exclude_roots:
+        return True
+    if "__pycache__" in parts:
+        return True
+    name = parts[-1]
+    if name == ".DS_Store" or fnmatch.fnmatch(name, "*.pyc"):
+        return True
+    return False
+
+with zipfile.ZipFile(love_path, "w") as zf:
+    for entry in roots:
+        target = root_dir / entry
+        if target.is_file():
+            rel = target.relative_to(root_dir).as_posix()
+            if not is_excluded(rel):
+                ctype = zipfile.ZIP_STORED if target.suffix.lower() in store_exts else zipfile.ZIP_DEFLATED
+                zinfo = zipfile.ZipInfo.from_file(target, rel)
+                zinfo.compress_type = ctype
+                with open(target, "rb") as f:
+                    zf.writestr(zinfo, f.read(), compress_type=ctype, compresslevel=9 if ctype == zipfile.ZIP_DEFLATED else None)
+        elif target.is_dir():
+            for dirpath, dirnames, filenames in os.walk(target):
+                dirnames[:] = sorted(
+                    d for d in dirnames
+                    if not is_excluded((Path(dirpath) / d).relative_to(root_dir).as_posix())
+                )
+                for fn in sorted(filenames):
+                    fpath = Path(dirpath) / fn
+                    rel = fpath.relative_to(root_dir).as_posix()
+                    if is_excluded(rel):
+                        continue
+                    ctype = zipfile.ZIP_STORED if fpath.suffix.lower() in store_exts else zipfile.ZIP_DEFLATED
+                    zinfo = zipfile.ZipInfo.from_file(fpath, rel)
+                    zinfo.compress_type = ctype
+                    with open(fpath, "rb") as f:
+                        zf.writestr(zinfo, f.read(), compress_type=ctype, compresslevel=9 if ctype == zipfile.ZIP_DEFLATED else None)
+PY
 
 echo "Built ${LOVE_PATH} ($(du -h "${LOVE_PATH}" | awk '{print $1}'))"
 
@@ -300,6 +334,59 @@ patch_manifest(love_dir / "app" / "src" / "main" / "AndroidManifest.xml", is_mai
 patch_manifest(love_dir / "app" / "src" / "embed" / "AndroidManifest.xml", is_main=False)
 PY
 
+    # Ensure assets/game.love is stored uncompressed (ZIP_STORED) in the APK so Android's
+    # AssetManager / PhysFS can seek PNG video frames in O(1) instead of inflating ~50 MB per frame.
+    python3 - "${LOVE_ANDROID_DIR}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+love_dir = Path(sys.argv[1])
+gradle_path = None
+is_kts = False
+for candidate, kts in (
+    (love_dir / "app" / "build.gradle", False),
+    (love_dir / "app" / "build.gradle.kts", True),
+):
+    if candidate.is_file():
+        gradle_path = candidate
+        is_kts = kts
+        break
+
+if gradle_path is None:
+    print(f"Warning: no app/build.gradle(.kts) found under {love_dir}; skipping noCompress check.", file=sys.stderr)
+    sys.exit(0)
+
+txt = gradle_path.read_text(encoding="utf-8")
+if re.search(r'noCompress[^\n]*["\']love["\']', txt):
+    print(f"Verified noCompress for 'love' already present in {gradle_path}")
+    sys.exit(0)
+
+new_txt = None
+res_match = re.search(r'^([ \t]*)androidResources\s*\{', txt, re.MULTILINE)
+aapt_match = re.search(r'^([ \t]*)aaptOptions\s*\{', txt, re.MULTILINE)
+android_match = re.search(r'^([ \t]*)android\s*\{', txt, re.MULTILINE)
+
+if res_match:
+    indent = res_match.group(1) + "    "
+    insert = f'\n{indent}noCompress.add("love")'
+    new_txt = txt[: res_match.end()] + insert + txt[res_match.end() :]
+elif aapt_match:
+    indent = aapt_match.group(1) + "    "
+    line = f'{indent}noCompress("love")' if is_kts else f"{indent}noCompress 'love'"
+    new_txt = txt[: aapt_match.end()] + "\n" + line + txt[aapt_match.end() :]
+elif android_match:
+    indent = android_match.group(1) + "    "
+    block = f'\n{indent}androidResources {{\n{indent}    noCompress.add("love")\n{indent}}}'
+    new_txt = txt[: android_match.end()] + block + txt[android_match.end() :]
+else:
+    print(f"Warning: could not locate android {{ }} block in {gradle_path} to add noCompress.", file=sys.stderr)
+    sys.exit(0)
+
+gradle_path.write_text(new_txt, encoding="utf-8")
+print(f"Added noCompress for 'love' in {gradle_path}")
+PY
+
     GRADLE_TASK="assembleEmbedNoRecordRelease"
     APK_VARIANT_DIR="embedNoRecord/release"
     if [[ "${DEBUG_APK}" -eq 1 ]]; then
@@ -349,6 +436,25 @@ PY
         APK_DEST="${OUT_DIR}/${APK_NAME}"
         cp "${FOUND_APK}" "${APK_DEST}"
         echo "APK ready: ${APK_DEST}"
+        python3 - "${APK_DEST}" <<'PY'
+import sys
+import zipfile
+
+apk_path = sys.argv[1]
+with zipfile.ZipFile(apk_path, "r") as zf:
+    try:
+        info = zf.getinfo("assets/game.love")
+    except KeyError:
+        print(f"Warning: assets/game.love not found inside {apk_path}", file=sys.stderr)
+        sys.exit(0)
+    if info.compress_type == zipfile.ZIP_STORED:
+        print(f"Verified: assets/game.love is STORED (uncompressed) in {apk_path}")
+    else:
+        print(
+            f"Warning: assets/game.love uses compress_type={info.compress_type} in {apk_path} (expected ZIP_STORED=0)",
+            file=sys.stderr,
+        )
+PY
         if [[ "${APK_NAME}" == *-unsigned.apk ]]; then
             echo "Warning: ${APK_NAME} is unsigned and cannot be installed on Android until signed (or rebuild with --debug)." >&2
         fi

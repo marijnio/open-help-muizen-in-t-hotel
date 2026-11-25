@@ -6,6 +6,7 @@ local AudioQueue = require("src.core.audio_queue")
 local Cursor = require("src.core.cursor")
 local Save = require("src.core.save")
 local SceneManager = require("src.core.scene_manager")
+local VideoPlayer = require("src.core.video_player")
 local Rooms = require("src.data.rooms")
 
 local function makeDefaultSession()
@@ -126,6 +127,7 @@ end
 
 function love.quit()
     App.saveProgress()
+    VideoPlayer.shutdownWorker()
 end
 
 function love.update(dt)
