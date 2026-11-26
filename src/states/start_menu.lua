@@ -218,8 +218,9 @@ function StartMenu:draw(vx, vy)
             love.graphics.setColor(0.95, 0.92, 0.68, 1)
             love.graphics.printf(
                 string.format(
-                    "Opgeslagen spel: %d/19 muizen  •  Niveau %d  •  Vallen: %d",
+                    "Opgeslagen spel: %d/%d muizen  •  Niveau %d  •  Vallen: %d",
                     self.saveSummary.caughtCount,
+                    Rooms.TOTAL_MICE,
                     self.saveSummary.difficulty,
                     self.saveSummary.trapsLeft
                 ),
@@ -245,7 +246,7 @@ function StartMenu:draw(vx, vy)
                 446,
                 148,
                 28,
-                string.format("Verder (%d/19)", self.saveSummary.caughtCount),
+                string.format("Verder (%d/%d)", self.saveSummary.caughtCount, Rooms.TOTAL_MICE),
                 self.hotzones.hoveredId == "load_game"
             )
         end

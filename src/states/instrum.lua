@@ -16,16 +16,7 @@ local MOUSE_CHANNEL = 19
 
 local function pickTargetInstrument()
     App.session.foundInstruments = App.session.foundInstruments or {}
-    local remaining = {}
-    for _, inst in ipairs(Rooms.INSTRUMENTS) do
-        if not App.session.foundInstruments[inst.id] then
-            table.insert(remaining, inst)
-        end
-    end
-    if #remaining > 0 then
-        return remaining[love.math.random(1, #remaining)]
-    end
-    return Rooms.INSTRUMENTS[1]
+    return Rooms.getNextBuildInstrument(App.session)
 end
 
 function Instrum:enter(params)

@@ -5,6 +5,7 @@ local AudioQueue = require("src.core.audio_queue")
 local Cursor = require("src.core.cursor")
 local SceneManager = require("src.core.scene_manager")
 local VideoPlayer = require("src.core.video_player")
+local Rooms = require("src.data.rooms")
 
 local Traps = {}
 
@@ -221,7 +222,7 @@ function Traps.drawToolbarHud(state, roomTitle, hasMouse)
     love.graphics.circle("fill", 104, 461, 4)
     love.graphics.setColor(0.95, 0.92, 0.68, 1)
     love.graphics.printf(
-        string.format("%s  •  %d/19  •  Vallen: %d", roomTitle, caught, trapsLeft),
+        string.format("%s  •  %d/%d  •  Vallen: %d", roomTitle, caught, Rooms.TOTAL_MICE, trapsLeft),
         114,
         454,
         382,

@@ -218,12 +218,12 @@ function Attic:catchMouse()
     self.mouseRoom = nil
     self.mouseSpot = nil
     self.mouseCatchLockTimer = 0
-    Rooms.markRoomCaught(App.session, "attic")
-    App.session.pendingInstrumentRoom = "Zolder"
+    Rooms.markRoomCaught(App.session, "attic", nil)
     if App.saveProgress then
         App.saveProgress()
     end
 
+    AudioQueue.stopMusic()
     AudioQueue.playSfx("dxr/shared/sounds/s_821.wav", 0.9)
     AudioQueue.clearAndPlay({ group = "endsound", key = "atticend" })
 
@@ -233,7 +233,7 @@ function Attic:catchMouse()
         self.animSpan = endSpan
         self.animFrameFloat = endSpan.startFrame
     else
-        SceneManager.switch(App.states.instrum, { roomTitle = "Zolder" })
+        SceneManager.switch(App.states.finale)
     end
 end
 
@@ -286,7 +286,10 @@ function Attic:update(dt)
     self.animFrameFloat = self.animFrameFloat + dt * playFps
     if self.animFrameFloat > self.animSpan.endFrame + 0.99 then
         if self.mode == "caught" then
-            SceneManager.switch(App.states.instrum, { roomTitle = "Zolder" })
+            self.animFrameFloat = self.animSpan.endFrame
+            if not AudioQueue.isPlaying() then
+                SceneManager.switch(App.states.finale)
+            end
             return
         elseif self.mode == "mouse_run" then
             AudioQueue.playSfx("dxr/shared/sounds/s_822.wav", 0.65)
@@ -319,7 +322,7 @@ function Attic:mousepressed(vx, vy, button)
 
     if self.mode == "caught" then
         if App.debugMode then
-            SceneManager.switch(App.states.instrum, { roomTitle = "Zolder" })
+            SceneManager.switch(App.states.finale)
         end
         return
     end
@@ -371,7 +374,7 @@ function Attic:keypressed(key)
     end
     if self.mode == "caught" then
         if App.debugMode and (key == "escape" or key == "space" or key == "return") then
-            SceneManager.switch(App.states.instrum, { roomTitle = "Zolder" })
+            SceneManager.switch(App.states.finale)
         end
         return true
     end

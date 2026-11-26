@@ -333,8 +333,7 @@ function Room:catchMouse(catchX, catchY)
     self.mouseSpot = nil
     self.mouseCatchLockTimer = 0
     self.mouseIdleTimer = 0
-    Rooms.markRoomCaught(App.session, self.room.id)
-    App.session.pendingInstrumentRoom = self.room.title
+    Rooms.markRoomCaught(App.session, self.room.id, self.room.title)
     if App.saveProgress then
         App.saveProgress()
     end

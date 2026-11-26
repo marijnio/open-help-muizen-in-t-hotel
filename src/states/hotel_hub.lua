@@ -111,10 +111,12 @@ function HotelHub:enter(params)
     self.bannerTimer = 0
     if params and params.justCaught then
         local caught = (App.session and App.session.caughtCount) or 0
-        if caught >= 19 then
-            self.banner = "Alle 19 muizen zijn herenigd in het orkest!"
+        if caught >= Rooms.TOTAL_MICE then
+            self.banner = "Alle 20 muizen zijn gevangen!"
+        elseif Rooms.isActiveMouseRoom(App.session, "attic") then
+            self.banner = "Alle 19 muzikanten zijn terug! Zoek nu de dirigent op de zolder!"
         else
-            self.banner = string.format("Muis gevangen in %s! (%d/19)", params.justCaught, caught)
+            self.banner = string.format("Muis gevangen in %s! (%d/%d)", params.justCaught, caught, Rooms.TOTAL_MICE)
         end
         self.bannerTimer = 3.5
     end
@@ -170,7 +172,7 @@ function HotelHub:enter(params)
         end,
     })
 
-    if (App.session and App.session.caughtCount or 0) > 0 then
+    if Rooms.getFoundInstrumentCount(App.session) > 0 then
         self.hotzones:add({
             id = "open_orch",
             x = 466,
@@ -374,8 +376,9 @@ function HotelHub:draw(vx, vy)
 
     -- Highlight hovered/selected room subtly + draw bottom bar status
     local caught = (App.session and App.session.caughtCount) or 0
+    local foundInstruments = Rooms.getFoundInstrumentCount(App.session)
     local traps = (App.session and App.session.trapsLeft) or 0
-    local pillW = (caught > 0) and 362 or 448
+    local pillW = (foundInstruments > 0) and 362 or 448
     love.graphics.setColor(0.12, 0.14, 0.18, 0.9)
     love.graphics.rectangle("fill", 96, 449, pillW, 24, 5, 5)
     love.graphics.setColor(0.95, 0.92, 0.65, 1)
@@ -383,14 +386,14 @@ function HotelHub:draw(vx, vy)
         and ((App.isTouchMode and "  •  Tik nogmaals: " or "  •  ") .. self.detectedRoom.title)
         or ""
     love.graphics.printf(
-        string.format("Gevangen: %d/19   •   Vallen: %d%s", caught, traps, roomLabel),
+        string.format("Gevangen: %d/%d   •   Vallen: %d%s", caught, Rooms.TOTAL_MICE, traps, roomLabel),
         100,
         454,
         pillW - 8,
         "center"
     )
 
-    if caught > 0 then
+    if foundInstruments > 0 then
         local hotOrch = (self.hotzones.hoveredId == "open_orch")
         love.graphics.setColor(hotOrch and 0.25 or 0.16, hotOrch and 0.52 or 0.34, hotOrch and 0.28 or 0.20, 0.95)
         love.graphics.rectangle("fill", 466, 449, 84, 24, 5, 5)
@@ -428,8 +431,23 @@ function HotelHub:draw(vx, vy)
 
     if App.debugMode then
         self.hotzones:drawDebug(vx, vy)
+        local activeList = {}
+        local mr = (App.session and App.session.mouseRooms) or {}
+        for _, r in ipairs(Rooms.LIST) do
+            if mr[r.id] then
+                table.insert(activeList, r.id)
+            end
+        end
         love.graphics.setColor(0.2, 1, 0.4, 1)
-        love.graphics.print("activeRoom=" .. tostring(App.session and App.session.activeMouseRoom), 10, 24)
+        love.graphics.print(
+            string.format(
+                "activeRooms=%s  build=%s",
+                table.concat(activeList, ","),
+                tostring(App.session and App.session.buildIndex)
+            ),
+            10,
+            24
+        )
     end
     love.graphics.pop()
 end

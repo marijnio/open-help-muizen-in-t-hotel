@@ -35,8 +35,27 @@ for _, r in ipairs(Rooms.LIST) do
     Rooms.BY_ID[r.id] = r
 end
 
-Rooms.TOTAL_MICE = 19
-Rooms.STANDARD_MICE = 18
+Rooms.TOTAL_MICE = 20
+Rooms.STANDARD_MICE = 19
+Rooms.ACTIVE_ROOM_SLOTS = 3
+
+Rooms.BUILD_ORDERS = {
+    [1] = {
+        "bass", "drums", "trump1", "trump2", "trom1", "trom2", "guitar",
+        "flute", "clarin1", "clarin2", "congas", "piano", "tenor1", "tenor2",
+        "tenor3", "sax1", "sax2", "baritone", "vibes",
+    },
+    [2] = {
+        "piano", "congas", "vibes", "clarin1", "clarin2", "flute", "bass",
+        "guitar", "tenor1", "tenor2", "tenor3", "sax1", "sax2", "drums",
+        "baritone", "trump1", "trump2", "trom1", "trom2",
+    },
+    [3] = {
+        "trom1", "trom2", "flute", "piano", "trump1", "trump2", "drums",
+        "tenor1", "tenor2", "tenor3", "sax1", "sax2", "bass", "clarin1",
+        "clarin2", "baritone", "vibes", "guitar", "congas",
+    },
+}
 
 local function randomInt(lo, hi)
     if love and love.math and love.math.random then
@@ -53,11 +72,33 @@ local function shuffle(list)
     return list
 end
 
-local function syncMouseRooms(session)
-    session.mouseRooms = {}
-    if session.activeMouseRoom then
-        session.mouseRooms[session.activeMouseRoom] = true
+function Rooms.getBuildOrder(buildIndex)
+    return Rooms.BUILD_ORDERS[buildIndex] or Rooms.BUILD_ORDERS[1]
+end
+
+function Rooms.getFoundInstrumentCount(session)
+    if not session or type(session.foundInstruments) ~= "table" then
+        return 0
     end
+    local count = 0
+    for id, v in pairs(session.foundInstruments) do
+        if v and Rooms.INSTRUMENTS_BY_ID[id] then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+function Rooms.getNextBuildInstrument(session)
+    local buildIdx = session and session.buildIndex or 1
+    local order = Rooms.getBuildOrder(buildIdx)
+    local found = (session and type(session.foundInstruments) == "table") and session.foundInstruments or {}
+    for _, id in ipairs(order) do
+        if not found[id] and Rooms.INSTRUMENTS_BY_ID[id] then
+            return Rooms.INSTRUMENTS_BY_ID[id]
+        end
+    end
+    return Rooms.INSTRUMENTS_BY_ID[order[1]] or Rooms.INSTRUMENTS[1]
 end
 
 function Rooms.initSessionRooms(session)
@@ -77,10 +118,15 @@ function Rooms.initSessionRooms(session)
 
     session.caughtMice = {}
     session.caughtCount = 0
+    session.foundInstruments = {}
+    session.lastInstrument = nil
     session.roomQueue = queue
-    session.activeMouseRoom = queue[1]
     session.pendingInstrumentRoom = nil
-    syncMouseRooms(session)
+    session.mouseRooms = {}
+    for i = 1, math.min(Rooms.ACTIVE_ROOM_SLOTS, #standardIds) do
+        session.mouseRooms[queue[i]] = true
+    end
+    session.activeMouseRoom = queue[1]
     return session
 end
 
@@ -111,13 +157,11 @@ function Rooms.normalizeSession(session)
 
     local rawCaught = type(session.caughtMice) == "table" and session.caughtMice or {}
     local cleanCaught = {}
-    local caughtCount = 0
     local standardCaught = 0
     local atticCaught = false
     for id, v in pairs(rawCaught) do
         if v and Rooms.BY_ID[id] then
             cleanCaught[id] = true
-            caughtCount = caughtCount + 1
             if id == "attic" then
                 atticCaught = true
             else
@@ -125,6 +169,7 @@ function Rooms.normalizeSession(session)
             end
         end
     end
+    local caughtCount = standardCaught + (atticCaught and 1 or 0)
     session.caughtMice = cleanCaught
     session.caughtCount = caughtCount
 
@@ -137,7 +182,6 @@ function Rooms.normalizeSession(session)
             foundCount = foundCount + 1
         end
     end
-    session.foundInstruments = cleanFound
 
     if not Rooms.INSTRUMENTS_BY_ID[session.lastInstrument] then
         session.lastInstrument = nil
@@ -145,40 +189,55 @@ function Rooms.normalizeSession(session)
 
     if type(session.pendingInstrumentRoom) == "string"
         and session.pendingInstrumentRoom ~= ""
-        and caughtCount > 0
-        and foundCount < caughtCount
+        and standardCaught > 0
+        and foundCount <= standardCaught
     then
-        -- Preserve pending instrument room when a mouse was caught right before matching
+        -- Preserve pending instrument room when a standard mouse was caught right before matching
     else
         session.pendingInstrumentRoom = nil
     end
 
-    local expectedFound = math.max(0, caughtCount - (session.pendingInstrumentRoom and 1 or 0))
-    if foundCount < expectedFound then
-        for _, inst in ipairs(Rooms.INSTRUMENTS) do
+    local expectedFound = math.max(0, math.min(Rooms.STANDARD_MICE, standardCaught - (session.pendingInstrumentRoom and 1 or 0)))
+    local buildOrder = Rooms.getBuildOrder(buildIdx)
+    if expectedFound == 0 then
+        cleanFound = {}
+        foundCount = 0
+        session.lastInstrument = nil
+    elseif foundCount < expectedFound then
+        for _, id in ipairs(buildOrder) do
             if foundCount >= expectedFound then
                 break
             end
-            if not cleanFound[inst.id] then
-                cleanFound[inst.id] = true
+            if Rooms.INSTRUMENTS_BY_ID[id] and not cleanFound[id] then
+                cleanFound[id] = true
                 foundCount = foundCount + 1
                 if not session.lastInstrument then
-                    session.lastInstrument = inst.id
+                    session.lastInstrument = id
                 end
             end
         end
+    elseif foundCount > expectedFound then
+        cleanFound = {}
+        foundCount = 0
+        for i = 1, expectedFound do
+            local id = buildOrder[i]
+            if id and Rooms.INSTRUMENTS_BY_ID[id] then
+                cleanFound[id] = true
+                foundCount = foundCount + 1
+                session.lastInstrument = id
+            end
+        end
     end
+    session.foundInstruments = cleanFound
 
-    if caughtCount >= Rooms.TOTAL_MICE then
+    if caughtCount >= Rooms.TOTAL_MICE or atticCaught then
         session.roomQueue = {}
         session.activeMouseRoom = nil
-        syncMouseRooms(session)
+        session.mouseRooms = {}
         return session
     end
 
-    local neededStandard = atticCaught
-        and math.max(0, Rooms.TOTAL_MICE - caughtCount)
-        or math.max(0, Rooms.STANDARD_MICE - standardCaught)
+    local neededStandard = math.max(0, Rooms.STANDARD_MICE - standardCaught)
 
     local cleanStandard = {}
     local seen = {}
@@ -224,48 +283,74 @@ function Rooms.normalizeSession(session)
     for _, id in ipairs(cleanStandard) do
         table.insert(queue, id)
     end
-    if not atticCaught and (caughtCount + #cleanStandard) < Rooms.TOTAL_MICE then
-        table.insert(queue, "attic")
-    end
+    table.insert(queue, "attic")
+    session.roomQueue = queue
 
-    local active = session.activeMouseRoom
-    local activeIdx = nil
-    if active and (active ~= "attic" or #cleanStandard == 0) then
-        for i, id in ipairs(queue) do
-            if id == active then
-                activeIdx = i
-                break
+    local activeRooms = {}
+    if #cleanStandard == 0 then
+        activeRooms["attic"] = true
+        session.mouseRooms = activeRooms
+        session.activeMouseRoom = "attic"
+    else
+        local activeCount = 0
+        local maxActive = math.min(Rooms.ACTIVE_ROOM_SLOTS, #cleanStandard)
+        if type(session.mouseRooms) == "table" then
+            for _, id in ipairs(cleanStandard) do
+                if activeCount >= maxActive then
+                    break
+                end
+                if session.mouseRooms[id] == true then
+                    activeRooms[id] = true
+                    activeCount = activeCount + 1
+                end
             end
         end
-    end
-
-    if activeIdx then
-        if activeIdx ~= 1 then
-            table.remove(queue, activeIdx)
-            table.insert(queue, 1, active)
+        for _, id in ipairs(cleanStandard) do
+            if activeCount >= maxActive then
+                break
+            end
+            if not activeRooms[id] then
+                activeRooms[id] = true
+                activeCount = activeCount + 1
+            end
         end
-    else
-        session.activeMouseRoom = queue[1]
+        session.mouseRooms = activeRooms
+        if session.activeMouseRoom and activeRooms[session.activeMouseRoom] then
+            -- Keep existing primary active room when still in shortlist
+        else
+            session.activeMouseRoom = cleanStandard[1]
+        end
     end
 
-    session.roomQueue = queue
-    syncMouseRooms(session)
     return session
 end
 
 function Rooms.isActiveMouseRoom(session, roomId)
-    return session ~= nil and roomId ~= nil and session.activeMouseRoom == roomId
+    return session ~= nil and roomId ~= nil and type(session.mouseRooms) == "table" and session.mouseRooms[roomId] == true
 end
 
-function Rooms.markRoomCaught(session, roomId)
+function Rooms.markRoomCaught(session, roomId, pendingInstrumentRoom)
     if not session or not roomId or not Rooms.BY_ID[roomId] then
         return session and session.activeMouseRoom or nil
     end
     session.caughtMice = session.caughtMice or {}
     session.caughtMice[roomId] = true
-    if session.activeMouseRoom == roomId then
-        session.activeMouseRoom = nil
+    session.pendingInstrumentRoom = pendingInstrumentRoom
+    session.mouseRooms = {}
+    session.activeMouseRoom = nil
+
+    if type(session.roomQueue) == "table" and #session.roomQueue > 0 then
+        local remaining = {}
+        for _, id in ipairs(session.roomQueue) do
+            if id ~= "attic" and not session.caughtMice[id] then
+                table.insert(remaining, id)
+            end
+        end
+        shuffle(remaining)
+        table.insert(remaining, "attic")
+        session.roomQueue = remaining
     end
+
     Rooms.normalizeSession(session)
     return session.activeMouseRoom
 end
@@ -315,9 +400,9 @@ Rooms.INSTRUMENTS = {
     { id = "tenor1",   name = "Tenorsax 1",    family = "sax",      instrumLabel = "tenor1",   loopLabel = "tenor1loop",   orchChannel = 15 },
     { id = "tenor2",   name = "Tenorsax 2",    family = "sax",      instrumLabel = "tenor2",   loopLabel = "tenor2loop",   orchChannel = 16 },
     { id = "tenor3",   name = "Tenorsax 3",    family = "sax",      instrumLabel = "tenor3",   loopLabel = "tenor3loop",   orchChannel = 17 },
-    { id = "sax1",     name = "Altsax 1",      family = "sax",      instrumLabel = "sax1",     loopLabel = "sax1loop",     orchChannel = 18 },
-    { id = "sax2",     name = "Altsax 2",      family = "sax",      instrumLabel = "sax2",     loopLabel = "sax2loop",     orchChannel = 19 },
-    { id = "baritone", name = "Baritonsax",    family = "sax",      instrumLabel = "baritone", loopLabel = "baritoneloop", orchChannel = 20 },
+    { id = "sax1",     name = "Altsax 1",      family = "sax",      instrumLabel = "sax1",     loopLabel = "sax1loop",     orchChannel = 19 },
+    { id = "sax2",     name = "Altsax 2",      family = "sax",      instrumLabel = "sax2",     loopLabel = "sax2loop",     orchChannel = 20 },
+    { id = "baritone", name = "Baritonsax",    family = "sax",      instrumLabel = "baritone", loopLabel = "baritoneloop", orchChannel = 18 },
     { id = "vibes",    name = "Vibrafoon",     family = "vibes",    instrumLabel = "vibes",    loopLabel = "vibesloop",    orchChannel = 23 },
 }
 

@@ -11,11 +11,17 @@ local Orch = {}
 
 local SKIP_LOCK_SECONDS = 3.0
 
-local function pickBuildTrack(foundCount)
+local function pickBuildTrack(latestId, foundCount)
+    if (foundCount or 0) <= 0 then
+        return nil, nil
+    end
     local buildKey = "build" .. tostring(App.session.buildIndex or 1)
-    local order = Assets.getMusicBuild(buildKey)
+    if latestId and Assets.getAudioPath("music_" .. buildKey, latestId) then
+        return buildKey, latestId
+    end
+    local order = Rooms.getBuildOrder(App.session.buildIndex)
     if order and #order > 0 then
-        local idx = math.max(1, math.min(#order, foundCount or 1))
+        local idx = math.max(1, math.min(#order, foundCount))
         return buildKey, Rooms.normalizeInstrumentId(order[idx])
     end
     return buildKey, (App.session and App.session.lastInstrument) or "drums"
@@ -48,13 +54,13 @@ function Orch:enter(params)
         end
     end
 
-    local buildKey, trackKey = pickBuildTrack(self.foundCount)
-    local groupName = "music_" .. buildKey
+    local buildKey, trackKey = pickBuildTrack(params.latestInstrument, self.foundCount)
+    local groupName = buildKey and ("music_" .. buildKey) or nil
     self.elapsed = 0
     self.skipUnlocked = self:canSkip()
     Cursor.setSystem(self.skipUnlocked and "hand" or "arrow")
     self.musicStarted = false
-    if App.session.musicEnabled ~= false and Assets.getAudioPath(groupName, trackKey) then
+    if groupName and trackKey and App.session.musicEnabled ~= false and Assets.getAudioPath(groupName, trackKey) then
         AudioQueue.playMusic({ group = groupName, key = trackKey }, { loop = false, volume = 0.85 })
         self.musicStarted = true
     end
@@ -70,7 +76,7 @@ function Orch:canSkip()
 end
 
 function Orch:proceed()
-    if not self.previewOnly and (App.session.caughtCount or 0) >= 19 then
+    if not self.previewOnly and (App.session.caughtCount or 0) >= Rooms.TOTAL_MICE then
         SceneManager.switch(App.states.finale)
     else
         SceneManager.switch(App.states.hotel_hub, { justCaught = self.roomTitle })
