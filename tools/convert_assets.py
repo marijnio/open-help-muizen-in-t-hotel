@@ -8,11 +8,13 @@ and BMP images into LÖVE-ready assets + assets/manifest.lua.
 from __future__ import annotations
 
 import argparse
+import bisect
 import hashlib
 import io
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import time
@@ -118,6 +120,139 @@ def _encode_opaque_png(img: Image.Image) -> bytes:
     return buf.getvalue()
 
 
+def _iter_qt_boxes(buf: bytes, start: int, end: int):
+    pos = start
+    while pos + 8 <= end:
+        sz, tag = struct.unpack(">I4s", buf[pos : pos + 8])
+        hdr = 8
+        if sz == 0:
+            sz = end - pos
+        elif sz == 1:
+            if pos + 16 > end:
+                break
+            sz = struct.unpack(">Q", buf[pos + 8 : pos + 16])[0]
+            hdr = 16
+        if sz < hdr or pos + sz > end:
+            break
+        yield tag, pos + hdr, pos + sz
+        pos += sz
+
+
+def extract_mov_palettes(src: Path):
+    """Parse QuickTime stsd/stsc/stts tables when a pal8 .MOV switches palettes mid-video."""
+    data = src.read_bytes()
+    video_mdia = None
+    for tag, s, e in _iter_qt_boxes(data, 0, len(data)):
+        if tag != b"moov":
+            continue
+        for t2, s2, e2 in _iter_qt_boxes(data, s, e):
+            if t2 != b"trak":
+                continue
+            for t3, s3, e3 in _iter_qt_boxes(data, s2, e2):
+                if t3 != b"mdia":
+                    continue
+                for t4, s4, e4 in _iter_qt_boxes(data, s3, e3):
+                    if t4 == b"minf":
+                        for t5, _, _ in _iter_qt_boxes(data, s4, e4):
+                            if t5 == b"vmhd":
+                                video_mdia = (s3, e3)
+                                break
+                if video_mdia:
+                    break
+            if video_mdia:
+                break
+        if video_mdia:
+            break
+
+    if not video_mdia:
+        return None
+
+    timescale = 600
+    stbl_range = None
+    for tag, s, e in _iter_qt_boxes(data, video_mdia[0], video_mdia[1]):
+        if tag == b"mdhd" and s + 16 <= e:
+            ver = data[s]
+            if ver == 0 and s + 16 <= e:
+                timescale = struct.unpack(">I", data[s + 12 : s + 16])[0] or 600
+            elif ver == 1 and s + 24 <= e:
+                timescale = struct.unpack(">I", data[s + 20 : s + 24])[0] or 600
+        elif tag == b"minf":
+            for t2, s2, e2 in _iter_qt_boxes(data, s, e):
+                if t2 == b"stbl":
+                    stbl_range = (s2, e2)
+                    break
+
+    if not stbl_range:
+        return None
+
+    palettes: Dict[int, List[int]] = {}
+    stsc_entries: List[Tuple[int, int, int]] = []
+    stts_entries: List[Tuple[int, int]] = []
+    chunk_count = 0
+
+    for tag, s, e in _iter_qt_boxes(data, stbl_range[0], stbl_range[1]):
+        if tag == b"stsd" and s + 8 <= e:
+            count = struct.unpack(">I", data[s + 4 : s + 8])[0]
+            ep = s + 8
+            for idx_entry in range(1, count + 1):
+                if ep + 8 > e:
+                    break
+                esize = struct.unpack(">I", data[ep : ep + 4])[0]
+                if esize < 8 or ep + esize > e:
+                    break
+                if esize >= 94:
+                    _depth, ctab_id = struct.unpack(">Hh", data[ep + 82 : ep + 86])
+                    if ctab_id == 0:
+                        _seed, flags, csize = struct.unpack(">IHH", data[ep + 86 : ep + 94])
+                        pal = [0] * 768
+                        for ci in range(csize + 1):
+                            off = ep + 94 + ci * 8
+                            if off + 8 > ep + esize:
+                                break
+                            val, r, g, b = struct.unpack(">HHHH", data[off : off + 8])
+                            pal_idx = val if (flags & 0x8000) == 0 else ci
+                            if 0 <= pal_idx < 256:
+                                pal[pal_idx * 3 : pal_idx * 3 + 3] = [r >> 8, g >> 8, b >> 8]
+                        palettes[idx_entry] = pal
+                ep += esize
+        elif tag == b"stsc" and s + 8 <= e:
+            n = struct.unpack(">I", data[s + 4 : s + 8])[0]
+            for i in range(n):
+                off = s + 8 + i * 12
+                if off + 12 <= e:
+                    stsc_entries.append(struct.unpack(">III", data[off : off + 12]))
+        elif tag == b"stts" and s + 8 <= e:
+            n = struct.unpack(">I", data[s + 4 : s + 8])[0]
+            for i in range(n):
+                off = s + 8 + i * 8
+                if off + 8 <= e:
+                    stts_entries.append(struct.unpack(">II", data[off : off + 8]))
+        elif tag in (b"stco", b"co64") and s + 8 <= e:
+            chunk_count = struct.unpack(">I", data[s + 4 : s + 8])[0]
+
+    if len(palettes) <= 1 or not stsc_entries or chunk_count <= 0:
+        return None
+
+    sample_sdi: List[int] = []
+    for i, (first_chunk, spc, sdi) in enumerate(stsc_entries):
+        end_chunk = (stsc_entries[i + 1][0] - 1) if (i + 1 < len(stsc_entries)) else chunk_count
+        end_chunk = min(end_chunk, chunk_count)
+        for _ in range(max(0, end_chunk - first_chunk + 1)):
+            sample_sdi.extend([sdi] * spc)
+
+    if not sample_sdi:
+        return None
+
+    sample_times: List[float] = []
+    t_ticks = 0
+    for cnt, delta in stts_entries:
+        for _ in range(cnt):
+            sample_times.append(t_ticks / timescale)
+            t_ticks += delta
+
+    return palettes, sample_sdi, sample_times
+
+
 def _encode_delta_patch(
     im_p: Image.Image,
     prev_rgb: Image.Image,
@@ -179,15 +314,31 @@ def convert_video(src: Path, out_dir: Path, rel_dir: str) -> dict:
     if res.returncode != 0:
         raise RuntimeError(f"ffmpeg video frames failed for {src}: {res.stderr}")
 
+    mov_pals = extract_mov_palettes(src)
+    raw_files = sorted(out_dir.glob("raw_*.png"))
     patches: List[Tuple[int, int]] = []
     patch_ids: Dict[Tuple[int, int, str], int] = {}
     steps: List[int] = []
     prev_rgb: Image.Image | None = None
-    for raw in sorted(out_dir.glob("raw_*.png")):
+    for frame_idx, raw in enumerate(raw_files):
         with Image.open(raw) as im:
             im.load()
         raw.unlink()
         im.info.pop("transparency", None)
+        if mov_pals is not None and im.mode == "P":
+            palettes, sample_sdi, sample_times = mov_pals
+            if len(raw_files) == len(sample_sdi):
+                sample_idx = frame_idx
+            elif sample_times:
+                sample_idx = max(
+                    0,
+                    min(len(sample_sdi) - 1, bisect.bisect_right(sample_times, (frame_idx / fps) + 1e-6) - 1),
+                )
+            else:
+                sample_idx = min(frame_idx, len(sample_sdi) - 1)
+            pal = palettes.get(sample_sdi[sample_idx])
+            if pal is not None:
+                im.putpalette(pal)
         rgb = im.convert("RGB")
         if prev_rgb is None:
             bbox = (0, 0, im.width, im.height)
