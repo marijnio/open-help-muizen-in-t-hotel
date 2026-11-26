@@ -113,17 +113,6 @@ function Instrum:buildHotzones()
     end
 
     self.hotzones:add({
-        id = "instrum_skip",
-        x = 16,
-        y = 442,
-        w = 56,
-        h = 36,
-        onClick = function()
-            self:completeMatching()
-        end
-    })
-
-    self.hotzones:add({
         id = "instrum_cat",
         x = 574,
         y = 442,
@@ -313,6 +302,10 @@ function Instrum:draw(vx, vy)
 
     local drawOpts = self.introVoPending and { hiddenChannels = { [MOUSE_CHANNEL] = true } } or nil
     DirectorStage.drawFrame("instrum", frameNum, drawOpts)
+
+    -- Hide the bottom-left hotel button baked into SHARED.DXR's bottom bar (cast 759)
+    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.rectangle("fill", 0, 445, 80, 35)
 
     -- Status pill inside the bottom bar
     love.graphics.setColor(0.10, 0.12, 0.16, 0.88)

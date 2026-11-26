@@ -15,10 +15,15 @@ local function loadSecondSlideImage()
     return Assets.getImage(rel)
 end
 
+local function loadIntroMusicPath()
+    local score = Assets.getDxr("muizen_exe")
+    return (score and score.casts and score.casts[6] and score.casts[6].sound) or "dxr/muizen_exe/sounds/s_6.mp3"
+end
+
 function Splash:enter()
     Cursor.reset()
     AudioQueue.stopAll()
-    AudioQueue.playMusic({ group = "root", key = "start" }, { loop = false, volume = 0.65 })
+    AudioQueue.playMusic(loadIntroMusicPath(), { loop = false, volume = 0.65 })
 
     self.slides = {}
     local first = Assets.getManifestImage("bombilla")
